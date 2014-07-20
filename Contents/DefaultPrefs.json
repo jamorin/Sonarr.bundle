@@ -1,0 +1,25 @@
+[
+    {
+        "id": "IP",
+        "label": "IP",
+        "type": "text",
+        "default": "localhost" 
+    },
+    {
+        "id": "Port",
+        "label": "Port",
+        "type": "text",
+        "default": "8989" 
+    },
+    {
+        "id": "API_Key",
+        "label": "API Key",
+        "type": "text"
+    },
+    {
+        "id": "https",
+        "label": "Use HTTPS",
+        "type": "bool",
+        "default": "False" 
+    }
+]

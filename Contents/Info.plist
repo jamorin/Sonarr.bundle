@@ -1,0 +1,12 @@
+<plist version="1.0">
+  <dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.plexapp.plugins.nzbdrone</string>
+    <key>PlexFrameworkVersion</key>
+    <string>2</string>
+    <key>PlexPluginCodePolicy</key>
+    <string>Elevated</string>
+    <key>PlexClientPlatforms</key>
+    <string>*</string>
+  </dict>
+</plist>
