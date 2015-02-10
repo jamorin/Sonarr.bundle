@@ -1,7 +1,7 @@
 from datetime import datetime
 
-PREFIX  = '/video/nzbdrone'
-NAME   = 'NzbDrone'
+PREFIX  = '/video/sonarr'
+NAME   = 'Sonarr'
 
 ICON = '256.png'
 PLAY = 'fa-play.png'
@@ -18,35 +18,152 @@ GRABBED = 'fa-cloud-download.png'
 FAILED = 'fa-cloud-download-failed.png'
 
 def Start():
+    global NAME
+    NAME = L('TITLE')
     ObjectContainer.art        =  R(ART)
     ObjectContainer.title1      = NAME
-    #ObjectContainer.thumb       = R(ICON)
     PopupDirectoryObject.thumb  = R(ICON)
-    # 3600*3x
-    #HTTP.CacheTime=0
-    Dict['UTCOffset'] = Datetime.Now() - datetime.utcnow().replace(tzinfo=None) + Datetime.Delta(seconds=1)
+    Dict['utcOffset'] = Datetime.Now().replace(minute=0, second=0, microsecond=0) \
+        - datetime.utcnow().replace(minute=0, second=0, microsecond=0, tzinfo=None)
+    Log.Debug('UTC offset: %s' % Dict['utcOffset'])
+    Plugin.AddViewGroup("InfoList", viewMode="InfoList", mediaType="items")
+    Plugin.AddViewGroup("List", viewMode="List", mediaType="items")
 
-@handler(PREFIX, NAME, ICON , ART)
+@handler(PREFIX, NAME, ICON, ART)
 def MainMenu():
-    oc = ObjectContainer(no_cache=True)
-
-    if not Prefs['API_Key']:
-        return oc
-    oc.add(DirectoryObject(key=Callback(SeriesList), title="Series",
-    summary = "View and edit your exisiting TV Shows", thumb=R(PLAY)))
-    oc.add(DirectoryObject(key=Callback(Calendar), title="Calendar",
-    summary = "See which shows that you follow have episodes airing soon", thumb=R(CALENDAR)))
-    oc.add(DirectoryObject(key=Callback(History), title="History",
-        summary = "Recently downloaded history", thumb=R(HISTORY)))
+    oc = ObjectContainer(view_group="InfoList")
+    oc.add(DirectoryObject(key=Callback(History), title=L('HISTORY_TITLE'),
+        summary = L('HISTORY_SUMMARY'), thumb=R(HISTORY)))
+    oc.add(DirectoryObject(key=Callback(Stub), title='Not impl',
+        summary = 'not impl'))
+    #oc.add(DirectoryObject(key=Callback(SeriesList), title="Series",
+    #summary = "View and edit your exisiting TV Shows", thumb=R(PLAY)))
+    #oc.add(DirectoryObject(key=Callback(Calendar), title="Calendar",
+    #summary = "See which shows that you follow have episodes airing soon", thumb=R(CALENDAR)))
+    #oc.add(DirectoryObject(key=Callback(History), title="History",
+    #    summary = "Recently downloaded history", thumb=R(HISTORY)))
     #oc.add(DirectoryObject(key=Callback(Wanted), title="Wanted",
         #summary = "Missing from NzbDrone", thumb=R(WANTED)))
-    oc.add(PrefsObject(title="Settings", summary="Set plugin preferences", thumb=R(PREFS_ICON)))
+    oc.add(PrefsObject(title=L('SETTINGS_TITLE'), summary=L('SETTINGS_SUMMARY'),
+        thumb=R(PREFS_ICON)))
     return oc
 
-@route(PREFIX+"/validate")
 def ValidatePrefs():
-    pass
+    Log.Debug('Validating preferences stub.')
+    return MessageContainer(L("SUCCESS"), L("PREFS_SAVED"))
 
+@route('%s/stub' % PREFIX)
+def Stub():
+    return MessageContainer('Stub', 'Allan please add details')
+
+@route("%s/api" % PREFIX)
+def ApiRequest(endpoint, params={}):
+    protocol = 'http'
+    if Prefs['ssl']:
+        protocol = 'https'
+    url = '%s://%s:%s%s/api/%s' % (protocol, Prefs['ip'], Prefs['port'], Prefs['base'], endpoint)
+    if len(params):
+        url += '?'
+        for key, value in params.items():
+            url += "%s=%s&" % (key, value)
+        url = url.rstrip('&')
+    json = JSON.ObjectFromURL(url, headers={'X-Api-Key': Prefs['apiKey']})
+    return json
+
+@route('%s/history' % PREFIX, page=int, pageSize=int)
+def History(page=1, pageSize=9):
+    oc = ObjectContainer(title2=L('HISTORY_TITLE'))
+    json = ApiRequest('history', params=dict(page=page, pageSize=pageSize,
+        sortKey='date', sortDir='desc'))
+    for record in json['records']:
+        seasonNbr = record['episode']['seasonNumber']
+        episodeNbr = record['episode']['episodeNumber']
+        date = Datetime.ParseDate(record['date'])
+        #if len(episode) ==  1: episode = '0'+episode
+        #title=PrettyDate(offset=dt)+' - '+r['series']['title']+' - '+season+'x'+episode
+        title="%s - %dX%02d %s" % (record['series']['title'], seasonNbr, episodeNbr,  prettydate(date))
+        event = record['eventType']
+        if event == "downloadFolderImported":
+            summary = L('IMPORTED')
+            thumb=R(IMPORTED)
+        elif event == 'downloadFailed':
+            summary = L('FAILED')
+            thumb=R(FAILED)
+        elif event == 'grabbed':
+            summary = L('GRABBED')
+            thumb=R(GRABBED)
+        elif event == 'episodeFileDeleted':
+            summary = L('DELETED')
+            thumb=R(ICON)
+        else:
+            summary = record['eventType']
+            thumb=R(ICON)
+        summary = "%s: %s %s" % (summary, record['episode']['title'],
+            record['quality']['quality']['name'])
+        oc.add(DirectoryObject(key=Callback(Stub), title=title, summary=summary,
+            thumb=thumb))
+    if not len(oc):
+        return MessageContainer(L('HISTORY_TITLE'), L('HISTORY_NONE'))
+    if page*pageSize < json['totalRecords']:
+        oc.add(NextPageObject(key=Callback(History, page=page+1)))
+    return oc
+
+def prettydate(d):
+    """ http://stackoverflow.com/a/5164027 """
+    diff = Datetime.Now() - (d.replace(tzinfo=None)+Dict['utcOffset'])
+    s = diff.seconds
+    if diff.days > 7 or diff.days < 0:
+        return d.strftime('%d %b %y')
+    elif diff.days == 1:
+        return '1 day ago'
+    elif diff.days > 1:
+        return '{} days ago'.format(diff.days)
+    elif s <= 1:
+        return 'just now'
+    elif s < 60:
+        return '{} seconds ago'.format(s)
+    elif s < 120:
+        return '1 minute ago'
+    elif s < 3600:
+        return '{} minutes ago'.format(s/60)
+    elif s < 7200:
+        return '1 hour ago'
+    else:
+        return '{} hours ago'.format(s/3600)
+    '''
+
+@route(PREFIX+"/history", page=int, pageSize=int)
+def History(page=1,pageSize=19):
+    oc = ObjectContainer(title2='History')
+    history = API_Request(endUrl='/history', params=dict(page=page,pageSize=pageSize,sortKey='date',sortDir='desc'))
+    if history == None:
+        return Invalid()
+    for r in history['records']:
+        season = str(r['episode']['seasonNumber'])
+        episode = str(r['episode']['episodeNumber'])
+        dt = Datetime.ParseDate(r['date'])+Dict['UTCOffset']
+        if len(episode) ==  1: episode = '0'+episode
+        title=PrettyDate(offset=dt)+' - '+r['series']['title']+' - '+season+'x'+episode
+        if r['eventType'] == 'downloadFolderImported':
+            summary = 'Imported: '
+            thumb=R(IMPORTED)
+        elif r['eventType'] == 'downloadFailed':
+            summary = 'Failed: '
+            thumb=R(FAILED)
+        elif r['eventType'] == 'grabbed':
+            summary = 'Grabbed: '
+            thumb=R(GRABBED)
+        summary += r['episode']['title']
+        record=dict(key=Callback(Stub), title=title, summary=summary, thumb=thumb)
+        oc.add(DirectoryObject(**record))
+    if len(oc) == 0:
+        return ObjectContainer(header=NAME, message="No history")
+    if page*pageSize < int(history['totalRecords']):
+        oc.add(NextPageObject(key=Callback(History, page=page+1)))
+    return oc
+    '''
+
+"""
 @route(PREFIX+"/series")
 def SeriesList():
     oc = ObjectContainer(title2="Series")
@@ -236,3 +353,4 @@ def GetThumb(image):
         pass
     return DataObject(data.content, 'image/jpeg')
 
+"""
