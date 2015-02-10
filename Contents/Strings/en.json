@@ -1,3 +1,14 @@
 {
-  "Title":"NzbDrone"
+  "HISTORY_SUMMARY": "Recently downloaded history",
+  "HISTORY_TITLE": "History",
+  "HISTORY_NONE": "No history",
+  "PREFS_SAVED": "Saved preferences",
+  "SETTINGS_SUMMARY": "Set plugin preferences",
+  "SETTINGS_TITLE": "Settings",
+  "SUCCESS":  "Success",
+  "TITLE":"Sonarr",
+  "DELETED": "Deleted",
+  "GRABBED": "Grabbed",
+  "FAILED": "Failed",
+  "IMPORTED": "Imported"
 }
