@@ -15,12 +15,13 @@
         "id": "base",
         "label":  "URL Base (ex. /sonarr)",
         "type": "text",
-        "default": "/"
+        "default": ""
     },
     {
         "id": "apiKey",
         "label": "API Key",
-        "type": "text"
+        "type": "text",
+        "default": ""
     },
     {
         "id": "ssl",

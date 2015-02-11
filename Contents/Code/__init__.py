@@ -4,18 +4,10 @@ PREFIX  = '/video/sonarr'
 NAME   = 'Sonarr'
 
 ICON = '256.png'
-PLAY = 'fa-play.png'
 ART  =  'logo.png'
-CALENDAR = 'fa-calendar.png'
-HISTORY = 'fa-history.png'
-PREFS_ICON = 'fa-cogs.png'
-WANTED = 'fa-exclamation-triangle.png'
+
 MONITORED = 'fa-bookmark-monitored.png'
 NOTMONITORED = 'fa-bookmark.png'
-
-IMPORTED = 'fa-download.png'
-GRABBED = 'fa-cloud-download.png'
-FAILED = 'fa-cloud-download-failed.png'
 
 def Start():
     global NAME
@@ -23,52 +15,65 @@ def Start():
     ObjectContainer.art        =  R(ART)
     ObjectContainer.title1      = NAME
     PopupDirectoryObject.thumb  = R(ICON)
-    Dict['utcOffset'] = Datetime.Now().replace(minute=0, second=0, microsecond=0) \
-        - datetime.utcnow().replace(minute=0, second=0, microsecond=0, tzinfo=None)
+    Dict['utcOffset'] = Datetime.Now().replace(minute=0, second=0,
+        microsecond=0) - datetime.utcnow().replace(minute=0, second=0,
+        microsecond=0, tzinfo=None)
     Log.Debug('UTC offset: %s' % Dict['utcOffset'])
     Plugin.AddViewGroup("InfoList", viewMode="InfoList", mediaType="items")
     Plugin.AddViewGroup("List", viewMode="List", mediaType="items")
     global historyEvents
-    historyEvents = {"downloadFolderImported": {'summary' = L('IMPORTED'), 'thumb' = R(IMPORTED)},
-                    "downloadFailed": {'summary' = L('FAILED'), 'thumb' = R(FAILED)},
-                    "grabbed": {'summary' = L('GRABBED'), 'thumb'= R(GRABBED)},
-                    "episodeFileDeleted": {'summary' = L('DELETED'), 'thumb'= R(ICON)}}
+    historyEvents = {
+        "downloadFolderImported": { 'summary': L('IMPORTED'),
+                                    'thumb': R('fa-download.png')},
+        "downloadFailed": { 'summary': L('FAILED'),
+                            'thumb': R('fa-cloud-download-failed.png')},
+        "grabbed": {'summary': L('GRABBED'),
+                    'thumb': R('fa-cloud-download.png')},
+        "episodeFileDeleted": { 'summary': L('DELETED'),
+                                'thumb': R(ICON) }
+    }
+    Log.Debug('URL:%s' % Dict['url'])
+    Log.Debug('Base:%s' % Prefs['base'])
+    HTTP.ClearCache()
 
 @handler(PREFIX, NAME, ICON, ART)
 def MainMenu():
     oc = ObjectContainer(view_group="InfoList")
+    oc.add(DirectoryObject(key=Callback(Stub), title=L('CALENDAR_TITLE'),
+        summary = 'NOT IMPL', thumb=R('fa-calendar.png')))
+    oc.add(DirectoryObject(key=Callback(Stub), title='DISKSPACE',
+        summary = 'NOT IMPL'))
     oc.add(DirectoryObject(key=Callback(History), title=L('HISTORY_TITLE'),
-        summary = L('HISTORY_SUMMARY'), thumb=R(HISTORY)))
-    oc.add(DirectoryObject(key=Callback(Stub), title='Not impl',
-        summary = 'not impl'))
-    #oc.add(DirectoryObject(key=Callback(SeriesList), title="Series",
-    #summary = "View and edit your exisiting TV Shows", thumb=R(PLAY)))
-    #oc.add(DirectoryObject(key=Callback(Calendar), title="Calendar",
-    #summary = "See which shows that you follow have episodes airing soon", thumb=R(CALENDAR)))
-    #oc.add(DirectoryObject(key=Callback(History), title="History",
-    #    summary = "Recently downloaded history", thumb=R(HISTORY)))
-    #oc.add(DirectoryObject(key=Callback(Wanted), title="Wanted",
-        #summary = "Missing from NzbDrone", thumb=R(WANTED)))
+        summary = L('HISTORY_SUMMARY'), thumb=R('fa-history.png')))
+    oc.add(DirectoryObject(key=Callback(Stub), title=L('MISSING_TITLE'),
+        summary = 'NOT IMPL', thumb=R('fa-exclamation-triangle.png')))
+    oc.add(DirectoryObject(key=Callback(Stub), title=L('QUEUE_TITLE'),
+        summary = 'NOT IMPL'))
+    oc.add(DirectoryObject(key=Callback(Series), title=L('SERIES_TITLE'),
+        summary = 'NOT IMPL',  thumb=R('fa-play.png')))
     oc.add(PrefsObject(title=L('SETTINGS_TITLE'), summary=L('SETTINGS_SUMMARY'),
-        thumb=R(PREFS_ICON)))
+        thumb=R('fa-cogs.png')))
     return oc
 
 def ValidatePrefs():
-    protocol = 'http'
     if Prefs['ssl']:
         protocol = 'https'
-    url = '%s://%s:%s%s/api' % (protocol, Prefs['ip'], Prefs['port'], Prefs['base'])
-    Dict['url'] = url + '/%s'
-    Log.Debug('Saving API url: %s' % Dict['url'])
+    else:
+        protocol = 'http'
+    Dict['url']  = '%s://%s:%s' % (protocol, Prefs['ip'], Prefs['port'])
+    Log.Debug('Saving url: %s' % Dict['url'])
+    Log.Debug('Base: %s' % Prefs['base'])
     return MessageContainer(L("SUCCESS"), L("PREFS_SAVED"))
 
 @route('%s/stub' % PREFIX)
 def Stub():
     return MessageContainer('Stub', 'Allan please add details')
 
-@route("%s/api" % PREFIX)
 def ApiRequest(endpoint, params={}):
-    url = Dict['url'] % endpoint
+    Log.Debug('url:%s' % Dict['url'])
+    Log.Debug('base:%s' % Prefs['base'])
+    url = "{}/api/{}".format(Dict['url']+Prefs['base'], endpoint)
+    Log.Debug("Full url:%s" % url)
     if len(params):
         url += '?'
         for key, value in params.items():
@@ -77,8 +82,29 @@ def ApiRequest(endpoint, params={}):
     json = JSON.ObjectFromURL(url, headers={'X-Api-Key': Prefs['apiKey']})
     return json
 
+@route('%s/series' % PREFIX)
+def Series():
+    oc = ObjectContainer(title2="Series")
+    json = ApiRequest('series')
+    for series in sorted(json, key=lambda x: x['titleSlug']):
+        title = series['title']
+        summary = series['network']
+        seriesId = series['id']
+        thumb=R(ICON)
+        for coverType in series['images']:
+            if coverType['coverType'] == "poster":
+                Log.Debug(coverType['url'])
+                thumb=Callback(GetThumb, url=Dict['url']+coverType['url'])
+                break
+        oc.add(PopupDirectoryObject(key=Callback(SeriesOptions,
+            seriesId=seriesId, title2=title), title=title, summary=summary,
+            thumb=thumb))
+    if not len(oc):
+        return MessageContainer(L('SERIES_TITLE'), L('SERIES_NONE'))
+    return oc
+
 @route('%s/history' % PREFIX, page=int, pageSize=int)
-def History(page=1, pageSize=9):
+def History(page=1, pageSize=19):
     oc = ObjectContainer(title2=L('HISTORY_TITLE'))
     json = ApiRequest('history', params=dict(page=page, pageSize=pageSize,
         sortKey='date', sortDir='desc'))
@@ -88,32 +114,17 @@ def History(page=1, pageSize=9):
         seriesTitle = record['series']['title']
         episodeTitle = record['episode']['title']
         episodeQuality = record['quality']['quality']['name']
+        sourceTitle = record['sourceTitle']
         date = Datetime.ParseDate(record['date'])
         event = record['eventType']
-        """
-        if event == "downloadFolderImported":
-            summary = L('IMPORTED')
-            thumb=R(IMPORTED)
-        elif event == 'downloadFailed':
-            summary = L('FAILED')
-            thumb=R(FAILED)
-        elif event == 'grabbed':
-            summary = L('GRABBED')
-            thumb=R(GRABBED)
-        elif event == 'episodeFileDeleted':
-            summary = L('DELETED')
-            thumb=R(ICON)
-        else:
-            summary = record['eventType']
-            thumb=R(ICON)
-        """
         if event in historyEvents:
             summary = historyEvents[event]['summary']
             thumb = historyEvents[event]['thumb']
         else:
             summary = record['eventType']
             thumb=R(ICON)
-        title="%s - %dX%02d %s" % (seriesTitle, seasonNbr, episodeNbr,  prettydate(date))
+        title="%s - %dX%02d %s" % (seriesTitle, seasonNbr, episodeNbr,
+            prettydate(date))
         summary = "%s: %s %s" % (summary, episodeTitle, episodeQuality)
         oc.add(DirectoryObject(key=Callback(Stub), title=title, summary=summary,
             thumb=thumb))
@@ -122,6 +133,23 @@ def History(page=1, pageSize=9):
     if page*pageSize < json['totalRecords']:
         oc.add(NextPageObject(key=Callback(History, page=page+1)))
     return oc
+
+@route('%s/seriespopup' % PREFIX, seriesId=int)
+def SeriesOptions(seriesId, title2):
+    oc = ObjectContainer(title2=title2)
+    oc.add(DirectoryObject(key=Callback(Stub),
+        title='Search for all episodes in this series', summary='wewef', thumb=R(ICON)))
+    oc.add(DirectoryObject(key=Callback(Stub),
+        title='Delete series', summary='wefwee', thumb=R(ICON)))
+    oc.add(DirectoryObject(key=Callback(Stub),
+        title='List seasons', summary='wefwee', thumb=R(ICON)))
+    return oc
+
+@route('%s/thumb' % PREFIX)
+def GetThumb(url, contentType='image/jpeg', timeout=10, cacheTime=10):
+    Log.Debug(url)
+    data = HTTP.Request(url=url, timeout=timeout, cacheTime=cacheTime)
+    return DataObject(data.content, contentType)
 
 def prettydate(d):
     """ http://stackoverflow.com/a/5164027 """
@@ -139,57 +167,8 @@ def prettydate(d):
         return '1 hour ago'
     else:
         return '{} hours ago'.format(s/3600)
-    '''
-
-@route(PREFIX+"/history", page=int, pageSize=int)
-def History(page=1,pageSize=19):
-    oc = ObjectContainer(title2='History')
-    history = API_Request(endUrl='/history', params=dict(page=page,pageSize=pageSize,sortKey='date',sortDir='desc'))
-    if history == None:
-        return Invalid()
-    for r in history['records']:
-        season = str(r['episode']['seasonNumber'])
-        episode = str(r['episode']['episodeNumber'])
-        dt = Datetime.ParseDate(r['date'])+Dict['UTCOffset']
-        if len(episode) ==  1: episode = '0'+episode
-        title=PrettyDate(offset=dt)+' - '+r['series']['title']+' - '+season+'x'+episode
-        if r['eventType'] == 'downloadFolderImported':
-            summary = 'Imported: '
-            thumb=R(IMPORTED)
-        elif r['eventType'] == 'downloadFailed':
-            summary = 'Failed: '
-            thumb=R(FAILED)
-        elif r['eventType'] == 'grabbed':
-            summary = 'Grabbed: '
-            thumb=R(GRABBED)
-        summary += r['episode']['title']
-        record=dict(key=Callback(Stub), title=title, summary=summary, thumb=thumb)
-        oc.add(DirectoryObject(**record))
-    if len(oc) == 0:
-        return ObjectContainer(header=NAME, message="No history")
-    if page*pageSize < int(history['totalRecords']):
-        oc.add(NextPageObject(key=Callback(History, page=page+1)))
-    return oc
-    '''
 
 """
-@route(PREFIX+"/series")
-def SeriesList():
-    oc = ObjectContainer(title2="Series")
-    shows = API_Request(endUrl='/series')
-    if shows == None:
-        return Invalid()
-    for s in sorted(shows, key=lambda x: x['titleSlug']):
-        for coverType in s['images']:
-            if coverType['coverType'] == "poster":
-                image = coverType['url']
-        thumb=Callback(GetThumb, image=Url()+image)
-        show=dict(key=Callback(SeasonList, seriesId=s['id'], seasons=s['seasons'], title2=s['title']), title=s['title'], summary=s['overview'], thumb=thumb)
-        oc.add(DirectoryObject(**show))
-    if len(oc) == 0:
-        return ObjectContainer(header=NAME, message="No shows found.")
-    return oc
-
 @route(PREFIX+"/seasonlist",seriesId=int, seasons=list)
 def SeasonList(seriesId, seasons, title2='Seasons'):
     oc = ObjectContainer(title2=title2)
@@ -253,36 +232,6 @@ def Calendar(past=dict(days=0),delta=dict(weeks=1)):
         return ObjectContainer(header=NAME, message="No shows airing this week.")
     return oc
 
-@route(PREFIX+"/history", page=int, pageSize=int)
-def History(page=1,pageSize=19):
-    oc = ObjectContainer(title2='History')
-    history = API_Request(endUrl='/history', params=dict(page=page,pageSize=pageSize,sortKey='date',sortDir='desc'))
-    if history == None:
-        return Invalid()
-    for r in history['records']:
-        season = str(r['episode']['seasonNumber'])
-        episode = str(r['episode']['episodeNumber'])
-        dt = Datetime.ParseDate(r['date'])+Dict['UTCOffset']
-        if len(episode) ==  1: episode = '0'+episode
-        title=PrettyDate(offset=dt)+' - '+r['series']['title']+' - '+season+'x'+episode
-        if r['eventType'] == 'downloadFolderImported':
-            summary = 'Imported: '
-            thumb=R(IMPORTED)
-        elif r['eventType'] == 'downloadFailed':
-            summary = 'Failed: '
-            thumb=R(FAILED)
-        elif r['eventType'] == 'grabbed':
-            summary = 'Grabbed: '
-            thumb=R(GRABBED)
-        summary += r['episode']['title']
-        record=dict(key=Callback(Stub), title=title, summary=summary, thumb=thumb)
-        oc.add(DirectoryObject(**record))
-    if len(oc) == 0:
-        return ObjectContainer(header=NAME, message="No history")
-    if page*pageSize < int(history['totalRecords']):
-        oc.add(NextPageObject(key=Callback(History, page=page+1)))
-    return oc
-
 # NOT USED - Can't figure out what the REST API url is for 'missing'
 @route(PREFIX+"/wanted", page=int, pageSize=int)
 def Wanted(page=1,pageSize=19):
@@ -300,39 +249,6 @@ def Wanted(page=1,pageSize=19):
     if page*pageSize < int(history['totalRecords']):
         oc.add(NextPageObject(key=Callback(Wanted, page=page+1)))
     return oc
-
-@route(PREFIX+"/api")
-def API_Request(endUrl,method='GET',params={}):
-    headers = {'X-Api-Key': Prefs['API_Key']}
-    request_url = Url()+'/api'+endUrl
-    if len(params) > 0:
-        request_url += "?"
-        for k in params.keys():
-            request_url += "%s=%s&" % (k, params[k])
-        request_url = request_url.strip('&')
-    try:
-        data = JSON.ObjectFromURL(request_url, timeout=20, headers=headers)
-    except:
-        return None
-    #data = JSON.ObjectFromURL(request_url, timeout=30, cacheTime=0, headers=headers)
-    #Log.Info(str(data))
-    return data
-
-@route(PREFIX+'/url')
-def Url():
-    if Prefs['https']:
-        protocol='https://'
-    else:
-        protocol='http://'
-    return protocol+Prefs['IP']+':'+Prefs['Port']
-
-@route(PREFIX+'/stub')
-def Stub():
-    return ObjectContainer(header=NAME, message="Stub method.")
-
-@route(PREFIX+'/invalid')
-def Invalid():
-    return ObjectContainer(header=NAME, message="A problem occurred! Invalid API Key?")
 
 # Convert a datetime to ISO-8601 formatted in UTC to send to NzbDrone
 def TimeStampUTCString(time=datetime.utcnow()):
@@ -353,13 +269,4 @@ def PrettyDate(offset, date=Datetime.Now()):
         return offset.strftime('Last %A')
     else:
         return offset.strftime('%B %d')
-
-@route(PREFIX+'/thumb')
-def GetThumb(image):
-    try:
-        data = HTTP.Request(url=image, timeout=20, cacheTime=3600)
-    except:
-        pass
-    return DataObject(data.content, 'image/jpeg')
-
 """

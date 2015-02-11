@@ -10,5 +10,10 @@
   "DELETED": "Deleted",
   "GRABBED": "Grabbed",
   "FAILED": "Failed",
-  "IMPORTED": "Imported"
+  "IMPORTED": "Imported",
+  "CALENDAR_TITLE": "Calendar",
+  "SERIES_TITLE": "Series",
+  "MISSING_TITLE": "Missing",
+  "QUEUE_TITLE": "Queue",
+  "SERIES_NONE": "No series"
 }
