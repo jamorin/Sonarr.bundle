@@ -28,6 +28,11 @@ def Start():
     Log.Debug('UTC offset: %s' % Dict['utcOffset'])
     Plugin.AddViewGroup("InfoList", viewMode="InfoList", mediaType="items")
     Plugin.AddViewGroup("List", viewMode="List", mediaType="items")
+    global historyEvents
+    historyEvents = {"downloadFolderImported": {'summary' = L('IMPORTED'), 'thumb' = R(IMPORTED)},
+                    "downloadFailed": {'summary' = L('FAILED'), 'thumb' = R(FAILED)},
+                    "grabbed": {'summary' = L('GRABBED'), 'thumb'= R(GRABBED)},
+                    "episodeFileDeleted": {'summary' = L('DELETED'), 'thumb'= R(ICON)}}
 
 @handler(PREFIX, NAME, ICON, ART)
 def MainMenu():
@@ -49,7 +54,12 @@ def MainMenu():
     return oc
 
 def ValidatePrefs():
-    Log.Debug('Validating preferences stub.')
+    protocol = 'http'
+    if Prefs['ssl']:
+        protocol = 'https'
+    url = '%s://%s:%s%s/api' % (protocol, Prefs['ip'], Prefs['port'], Prefs['base'])
+    Dict['url'] = url + '/%s'
+    Log.Debug('Saving API url: %s' % Dict['url'])
     return MessageContainer(L("SUCCESS"), L("PREFS_SAVED"))
 
 @route('%s/stub' % PREFIX)
@@ -58,10 +68,7 @@ def Stub():
 
 @route("%s/api" % PREFIX)
 def ApiRequest(endpoint, params={}):
-    protocol = 'http'
-    if Prefs['ssl']:
-        protocol = 'https'
-    url = '%s://%s:%s%s/api/%s' % (protocol, Prefs['ip'], Prefs['port'], Prefs['base'], endpoint)
+    url = Dict['url'] % endpoint
     if len(params):
         url += '?'
         for key, value in params.items():
@@ -78,11 +85,12 @@ def History(page=1, pageSize=9):
     for record in json['records']:
         seasonNbr = record['episode']['seasonNumber']
         episodeNbr = record['episode']['episodeNumber']
+        seriesTitle = record['series']['title']
+        episodeTitle = record['episode']['title']
+        episodeQuality = record['quality']['quality']['name']
         date = Datetime.ParseDate(record['date'])
-        #if len(episode) ==  1: episode = '0'+episode
-        #title=PrettyDate(offset=dt)+' - '+r['series']['title']+' - '+season+'x'+episode
-        title="%s - %dX%02d %s" % (record['series']['title'], seasonNbr, episodeNbr,  prettydate(date))
         event = record['eventType']
+        """
         if event == "downloadFolderImported":
             summary = L('IMPORTED')
             thumb=R(IMPORTED)
@@ -98,8 +106,15 @@ def History(page=1, pageSize=9):
         else:
             summary = record['eventType']
             thumb=R(ICON)
-        summary = "%s: %s %s" % (summary, record['episode']['title'],
-            record['quality']['quality']['name'])
+        """
+        if event in historyEvents:
+            summary = historyEvents[event]['summary']
+            thumb = historyEvents[event]['thumb']
+        else:
+            summary = record['eventType']
+            thumb=R(ICON)
+        title="%s - %dX%02d %s" % (seriesTitle, seasonNbr, episodeNbr,  prettydate(date))
+        summary = "%s: %s %s" % (summary, episodeTitle, episodeQuality)
         oc.add(DirectoryObject(key=Callback(Stub), title=title, summary=summary,
             thumb=thumb))
     if not len(oc):
@@ -118,12 +133,6 @@ def prettydate(d):
         return '1 day ago'
     elif diff.days > 1:
         return '{} days ago'.format(diff.days)
-    elif s <= 1:
-        return 'just now'
-    elif s < 60:
-        return '{} seconds ago'.format(s)
-    elif s < 120:
-        return '1 minute ago'
     elif s < 3600:
         return '{} minutes ago'.format(s/60)
     elif s < 7200:
