@@ -39,18 +39,16 @@ def Start():
 @handler(PREFIX, NAME, ICON, ART)
 def MainMenu():
     oc = ObjectContainer(view_group="InfoList")
+    oc.add(DirectoryObject(key=Callback(Series), title=L('SERIES_TITLE'),
+        summary = 'NOT IMPL',  thumb=R('fa-play.png')))
     oc.add(DirectoryObject(key=Callback(Stub), title=L('CALENDAR_TITLE'),
         summary = 'NOT IMPL', thumb=R('fa-calendar.png')))
-    oc.add(DirectoryObject(key=Callback(Stub), title='DISKSPACE',
+    oc.add(DirectoryObject(key=Callback(Stub), title=L('QUEUE_TITLE'),
         summary = 'NOT IMPL'))
     oc.add(DirectoryObject(key=Callback(History), title=L('HISTORY_TITLE'),
         summary = L('HISTORY_SUMMARY'), thumb=R('fa-history.png')))
     oc.add(DirectoryObject(key=Callback(Stub), title=L('MISSING_TITLE'),
         summary = 'NOT IMPL', thumb=R('fa-exclamation-triangle.png')))
-    oc.add(DirectoryObject(key=Callback(Stub), title=L('QUEUE_TITLE'),
-        summary = 'NOT IMPL'))
-    oc.add(DirectoryObject(key=Callback(Series), title=L('SERIES_TITLE'),
-        summary = 'NOT IMPL',  thumb=R('fa-play.png')))
     oc.add(PrefsObject(title=L('SETTINGS_TITLE'), summary=L('SETTINGS_SUMMARY'),
         thumb=R('fa-cogs.png')))
     return oc
@@ -86,10 +84,10 @@ def ApiRequest(endpoint, params={}):
 def Series():
     oc = ObjectContainer(title2="Series")
     json = ApiRequest('series')
-    for series in sorted(json, key=lambda x: x['titleSlug']):
+    for series in sorted(json, key=lambda x: x['sortTitle']):
         title = series['title']
-        summary = series['network']
         seriesId = series['id']
+        summary = series['network']+str(seriesId)
         thumb=R(ICON)
         for coverType in series['images']:
             if coverType['coverType'] == "poster":
@@ -137,13 +135,21 @@ def History(page=1, pageSize=19):
 @route('%s/seriespopup' % PREFIX, seriesId=int)
 def SeriesOptions(seriesId, title2):
     oc = ObjectContainer(title2=title2)
-    oc.add(DirectoryObject(key=Callback(Stub),
-        title='Search for all episodes in this series', summary='wewef', thumb=R(ICON)))
-    oc.add(DirectoryObject(key=Callback(Stub),
+    oc.add(DirectoryObject(key=Callback(SearchEpisodeSeries, seriesId=0, title2=title2),
+        title='Series Search', summary='Search for all episodes in this series', thumb=R(ICON)))
+    oc.add(DirectoryObject(key=Callback(DeleteSeries, seriesId=0, title2=title2),
         title='Delete series', summary='wefwee', thumb=R(ICON)))
     oc.add(DirectoryObject(key=Callback(Stub),
         title='List seasons', summary='wefwee', thumb=R(ICON)))
     return oc
+
+@route('%s/searchepisodeseries' % PREFIX, seriesId=int)
+def SearchEpisodeSeries(seriesId, title2):
+    return MessageContainer(title2, 'Searching for episodes in seriesId:%d' % seriesId)
+
+@route('%s/deleteseries' % PREFIX, seriesId=int)
+def DeleteSeries(seriesId, title2):
+    return MessageContainer(title2, 'Deleting  seriesId:%d' % seriesId)
 
 @route('%s/thumb' % PREFIX)
 def GetThumb(url, contentType='image/jpeg', timeout=10, cacheTime=10):
@@ -167,6 +173,29 @@ def prettydate(d):
         return '1 hour ago'
     else:
         return '{} hours ago'.format(s/3600)
+
+def human(dt, precision=2, past_tense='%s ago', future_tense='in %s'):
+    """Accept a datetime or timedelta, return a human readable delta string"""
+    delta = dt
+    if type(dt) is not type(timedelta()):
+        delta = datetime.now() - dt
+
+    the_tense = past_tense
+    if delta < timedelta(0):
+        the_tense = future_tense
+
+    d = delta2dict( delta )
+    hlist = []
+    count = 0
+    units = ( 'year', 'day', 'hour', 'minute', 'second', 'microsecond' )
+    for unit in units:
+        if count >= precision: break # met precision
+        if d[ unit ] == 0: continue # skip 0's
+        s = '' if d[ unit ] == 1 else 's' # handle plurals
+        hlist.append( '%s %s%s' % ( d[unit], unit, s ) )
+        count += 1
+    human_delta = ', '.join( hlist )
+    return the_tense % human_delta
 
 """
 @route(PREFIX+"/seasonlist",seriesId=int, seasons=list)

@@ -27,6 +27,6 @@
         "id": "ssl",
         "label": "Enable SSL",
         "type": "bool",
-        "default": "False"
+        "default": "false"
     }
 ]
