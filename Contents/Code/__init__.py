@@ -1,4 +1,5 @@
 from datetime import datetime
+import requests
 
 PREFIX  = '/video/sonarr'
 NAME   = 'Sonarr'
@@ -6,49 +7,47 @@ NAME   = 'Sonarr'
 ICON = '256.png'
 ART  =  'logo.png'
 
-MONITORED = 'fa-bookmark-monitored.png'
-NOTMONITORED = 'fa-bookmark.png'
+# Default thumb to question mark
+# Migrate all api calls to requests
+
 
 def Start():
     global NAME
     NAME = L('TITLE')
     ObjectContainer.art        =  R(ART)
     ObjectContainer.title1      = NAME
-    PopupDirectoryObject.thumb  = R(ICON)
+    ObjectContainer.title2      = NAME
+    DirectoryObject.thumb  = R(ICON)
     Dict['utcOffset'] = Datetime.Now().replace(minute=0, second=0,
         microsecond=0) - datetime.utcnow().replace(minute=0, second=0,
         microsecond=0, tzinfo=None)
     Log.Debug('UTC offset: %s' % Dict['utcOffset'])
     Plugin.AddViewGroup("InfoList", viewMode="InfoList", mediaType="items")
     Plugin.AddViewGroup("List", viewMode="List", mediaType="items")
-    global historyEvents
-    historyEvents = {
-        "downloadFolderImported": { 'summary': L('IMPORTED'),
-                                    'thumb': R('fa-download.png')},
-        "downloadFailed": { 'summary': L('FAILED'),
-                            'thumb': R('fa-cloud-download-failed.png')},
-        "grabbed": {'summary': L('GRABBED'),
-                    'thumb': R('fa-cloud-download.png')},
-        "episodeFileDeleted": { 'summary': L('DELETED'),
-                                'thumb': R(ICON) }
-    }
-    Log.Debug('URL:%s' % Dict['url'])
-    Log.Debug('Base:%s' % Prefs['base'])
+    if Prefs['ssl']:
+        protocol = 'https'
+    else:
+        protocol = 'http'
+    Dict['url']  = '%s://%s:%s' % (protocol, Prefs['ip'], Prefs['port'])
+    Log.Debug('Sonarr url: %s' % Dict['url'])
+    Dict['apiUrl'] = "{}/api/".format(Dict['url']+Prefs['base'])
+    Log.Debug('API Url: %s' % Dict['apiUrl'])
+    # For Debug
     HTTP.ClearCache()
 
 @handler(PREFIX, NAME, ICON, ART)
 def MainMenu():
     oc = ObjectContainer(view_group="InfoList")
     oc.add(DirectoryObject(key=Callback(Series), title=L('SERIES_TITLE'),
-        summary = 'NOT IMPL',  thumb=R('fa-play.png')))
-    oc.add(DirectoryObject(key=Callback(Stub), title=L('CALENDAR_TITLE'),
-        summary = 'NOT IMPL', thumb=R('fa-calendar.png')))
-    oc.add(DirectoryObject(key=Callback(Stub), title=L('QUEUE_TITLE'),
-        summary = 'NOT IMPL'))
+        summary = 'View all series in your collection',  thumb=R('fa-play.png')))
+    oc.add(DirectoryObject(key=Callback(Calendar), title=L('CALENDAR_TITLE'),
+        summary = "Get this week's upcoming episodes", thumb=R('fa-calendar.png')))
+    oc.add(DirectoryObject(key=Callback(Queue), title=L('QUEUE_TITLE'),
+        summary = 'Display currently downloading info'))
     oc.add(DirectoryObject(key=Callback(History), title=L('HISTORY_TITLE'),
         summary = L('HISTORY_SUMMARY'), thumb=R('fa-history.png')))
-    oc.add(DirectoryObject(key=Callback(Stub), title=L('MISSING_TITLE'),
-        summary = 'NOT IMPL', thumb=R('fa-exclamation-triangle.png')))
+    oc.add(DirectoryObject(key=Callback(Wanted), title=L('MISSING_TITLE'),
+        summary = 'List missing episodes (episodes without files)', thumb=R('fa-exclamation-triangle.png')))
     oc.add(PrefsObject(title=L('SETTINGS_TITLE'), summary=L('SETTINGS_SUMMARY'),
         thumb=R('fa-cogs.png')))
     return oc
@@ -59,8 +58,9 @@ def ValidatePrefs():
     else:
         protocol = 'http'
     Dict['url']  = '%s://%s:%s' % (protocol, Prefs['ip'], Prefs['port'])
-    Log.Debug('Saving url: %s' % Dict['url'])
-    Log.Debug('Base: %s' % Prefs['base'])
+    Log.Debug('Sonarr url: %s' % Dict['url'])
+    Dict['apiUrl'] = "{}/api/".format(Dict['url']+Prefs['base'])
+    Log.Debug('API Url: %s' % Dict['apiUrl'])
     return MessageContainer(L("SUCCESS"), L("PREFS_SAVED"))
 
 @route('%s/stub' % PREFIX)
@@ -68,88 +68,197 @@ def Stub():
     return MessageContainer('Stub', 'Allan please add details')
 
 def ApiRequest(endpoint, params={}):
-    Log.Debug('url:%s' % Dict['url'])
-    Log.Debug('base:%s' % Prefs['base'])
-    url = "{}/api/{}".format(Dict['url']+Prefs['base'], endpoint)
-    Log.Debug("Full url:%s" % url)
+    url = Dict['apiUrl'] + endpoint
     if len(params):
         url += '?'
         for key, value in params.items():
             url += "%s=%s&" % (key, value)
         url = url.rstrip('&')
-    json = JSON.ObjectFromURL(url, headers={'X-Api-Key': Prefs['apiKey']})
-    return json
+    request = JSON.ObjectFromURL(url, headers={'X-Api-Key': Prefs['apiKey']})
+    return request
 
 @route('%s/series' % PREFIX)
 def Series():
     oc = ObjectContainer(title2="Series")
-    json = ApiRequest('series')
-    for series in sorted(json, key=lambda x: x['sortTitle']):
+    request = ApiRequest('series')
+    oc.add(InputDirectoryObject(key=Callback(SeriesSearch), title="Add Series", summary="SHIT", prompt="Add New Series"))
+    for series in sorted(request, key=lambda x: x['sortTitle']):
         title = series['title']
         seriesId = series['id']
         summary = series['network']+str(seriesId)
-        thumb=R(ICON)
+        dirObj = DirectoryObject(key=Callback(SeriesOptions,
+            seriesId=seriesId, title2=title), title=title, summary=summary)
         for coverType in series['images']:
             if coverType['coverType'] == "poster":
-                Log.Debug(coverType['url'])
-                thumb=Callback(GetThumb, url=Dict['url']+coverType['url'])
+                dirObj.thumb=Callback(GetThumb, url=Dict['url']+coverType['url'])
                 break
-        oc.add(PopupDirectoryObject(key=Callback(SeriesOptions,
-            seriesId=seriesId, title2=title), title=title, summary=summary,
-            thumb=thumb))
+        oc.add(dirObj)
+    return oc
+
+@route('%s/series/search' % PREFIX)
+def SeriesSearch(query):
+    Log.Debug("Searching for [%s]" % query)
+    request = ApiRequest('Series/lookup', params={'term':String.Quote(query)})
+    oc = ObjectContainer(title2='Results')
+    profile = ApiRequest('qualityprofile')[0]['id']
+    rootFolderPath = ApiRequest('rootfolder')[0]['path']
+    for series in request:
+        title = '%s (%s)' % (series['title'], series['year'])
+        tvdbId = series['tvdbId']
+        title = series['title']
+        titleSlug = series['titleSlug']
+        seasons = series['seasons']
+        seasonFolder = True
+        newSeries = {'tvdbId': tvdbId, 'title': title, 'qualityProfileId': profile,
+            'titleSlug': titleSlug, 'seasons': seasons, 'seasonFolder': seasonFolder, 'rootFolderPath': rootFolderPath}
+        dirObj = DirectoryObject(key=Callback(AddSeries, series=newSeries), title=title, summary='wfwf')
+        if 'remotePoster' in series:
+            dirObj.thumb=Callback(GetThumb, url=series['remotePoster'])
+        oc.add(dirObj)
     if not len(oc):
-        return MessageContainer(L('SERIES_TITLE'), L('SERIES_NONE'))
+        return MessageContainer('No results', 'Search: %s' % query)
+    return oc
+
+@route('%s/series/add' % PREFIX, series=dict)
+def AddSeries(series):
+    url = Dict['apiUrl'] + 'series'
+    request = requests.post(url, json=series,
+        headers={'X-Api-Key': Prefs['apiKey']})
+    Log.Debug(type(request.content))
+    return MessageContainer('added', 'yo added')
+
+@route('%s/queue' % PREFIX)
+def Queue():
+    oc = ObjectContainer(title2='Queue')
+    if not len(oc):
+        return MessageContainer('Empty', "Nothing in the queue")
     return oc
 
 @route('%s/history' % PREFIX, page=int, pageSize=int)
 def History(page=1, pageSize=19):
     oc = ObjectContainer(title2=L('HISTORY_TITLE'))
-    json = ApiRequest('history', params=dict(page=page, pageSize=pageSize,
+    request = ApiRequest('history', params=dict(page=page, pageSize=pageSize,
         sortKey='date', sortDir='desc'))
-    for record in json['records']:
+    for record in request['records']:
         seasonNbr = record['episode']['seasonNumber']
         episodeNbr = record['episode']['episodeNumber']
         seriesTitle = record['series']['title']
         episodeTitle = record['episode']['title']
         episodeQuality = record['quality']['quality']['name']
-        sourceTitle = record['sourceTitle']
         date = Datetime.ParseDate(record['date'])
         event = record['eventType']
-        if event in historyEvents:
-            summary = historyEvents[event]['summary']
-            thumb = historyEvents[event]['thumb']
+        episodeId = record['episodeId']
+        if event == "downloadFolderImported":
+            summary = L('IMPORTED')
+            thumb = R('fa-download.png')
+        elif event == "downloadFailed":
+            summary = L('FAILED')
+            thumb = R('fa-cloud-download-failed.png')
+        elif event == "grabbed":
+            summary = L('GRABBED')
+            thumb = R('fa-cloud-download.png')
+        elif event == "episodeFileDeleted":
+            summary = L('DELETED')
+            thumb = R(ICON)
         else:
             summary = record['eventType']
-            thumb=R(ICON)
+            thumb = R(ICON)
         title="%s - %dX%02d %s" % (seriesTitle, seasonNbr, episodeNbr,
             prettydate(date))
         summary = "%s: %s %s" % (summary, episodeTitle, episodeQuality)
-        oc.add(DirectoryObject(key=Callback(Stub), title=title, summary=summary,
+        oc.add(DirectoryObject(key=Callback(EpisodeOptions, episodeId=episodeId), title=title, summary=summary,
             thumb=thumb))
     if not len(oc):
         return MessageContainer(L('HISTORY_TITLE'), L('HISTORY_NONE'))
-    if page*pageSize < json['totalRecords']:
+    if page*pageSize < request['totalRecords']:
         oc.add(NextPageObject(key=Callback(History, page=page+1)))
     return oc
 
-@route('%s/seriespopup' % PREFIX, seriesId=int)
+@route('%s/series/options' % PREFIX)
 def SeriesOptions(seriesId, title2):
     oc = ObjectContainer(title2=title2)
-    oc.add(DirectoryObject(key=Callback(SearchEpisodeSeries, seriesId=0, title2=title2),
-        title='Series Search', summary='Search for all episodes in this series', thumb=R(ICON)))
-    oc.add(DirectoryObject(key=Callback(DeleteSeries, seriesId=0, title2=title2),
-        title='Delete series', summary='wefwee', thumb=R(ICON)))
+    oc.add(DirectoryObject(key=Callback(Stub), title='Toggle Monitored', summary='Toggle shit'))
     oc.add(DirectoryObject(key=Callback(Stub),
-        title='List seasons', summary='wefwee', thumb=R(ICON)))
+        title='Change Quality', summary='Set quality profile', thumb=R(ICON)))
+    oc.add(DirectoryObject(key=Callback(SearchEpisodeSeries, seriesId=seriesId, title2=title2),
+        title='Series Search', summary='Search for all episodes in this series', thumb=R(ICON)))
+    oc.add(DirectoryObject(key=Callback(DeleteSeries, seriesId=seriesId, title2=title2),
+        title='Delete series', summary='DELETE SERIES', thumb=R(ICON)))
+    oc.add(DirectoryObject(key=Callback(Seasons, seriesId=seriesId),
+        title='List seasons', summary='LIST SEASONS', thumb=R(ICON)))
     return oc
 
-@route('%s/searchepisodeseries' % PREFIX, seriesId=int)
-def SearchEpisodeSeries(seriesId, title2):
-    return MessageContainer(title2, 'Searching for episodes in seriesId:%d' % seriesId)
+@route('%s/series/seasons' % PREFIX)
+def Seasons(seriesId):
+    request = ApiRequest('series/%s' % seriesId)
+    title = request['title']
+    oc = ObjectContainer(title2=title)
+    for season in reversed(request["seasons"]):
+        if season["monitored"]:
+            thumb = R('fa-bookmark-monitored.png')
+            summary = "Monitored"
+        else:
+            thumb = R('fa-bookmark.png')
+            summary = "Not Monitored"
+        seasonNbr = season["seasonNumber"]
+        oc.add(DirectoryObject(key=Callback(SeasonsOptions, seriesId=seriesId,
+            seasonId=seasonNbr), title="Season %s" % seasonNbr,
+            summary = summary, thumb=thumb))
+    if not len(oc):
+        return MessageContainer(title2, "NO SEASONS FOUND")
+    return oc
 
-@route('%s/deleteseries' % PREFIX, seriesId=int)
+@route('%s/series/seasons/options' % PREFIX)
+def SeasonsOptions(seriesId, seasonId):
+    oc = ObjectContainer(title2="Season %s" % seasonId)
+    oc.add(DirectoryObject(key=Callback(Stub),
+        title='Toggle Monitored Status', summary='Current status is: STUB', thumb=R(ICON)))
+    oc.add(DirectoryObject(key=Callback(Stub),
+        title='Season Search', summary='Automatic search for all episodes in this season', thumb=R(ICON)))
+    oc.add(DirectoryObject(key=Callback(Stub),
+        title='Delete Season', summary='Delete this season from disk', thumb=R(ICON)))
+    oc.add(DirectoryObject(key=Callback(Episodes, seriesId=seriesId, seasonId=seasonId),
+        title='List episodes', summary='List episodes for this season', thumb=R(ICON)))
+    return oc
+
+@route('%s/episodes' % PREFIX)
+def Episodes(seriesId, seasonId):
+    request = ApiRequest("episode", {'seriesId': seriesId})
+    seriesTitle = request[0]['series']['title']
+    oc = ObjectContainer(title2=seriesTitle)
+    for episode in reversed(request):
+        seasonNbr = str(episode['seasonNumber'])
+        if not seasonNbr == seasonId:
+            continue
+        episodeNbr = episode["episodeNumber"]
+        title = "%d %s" % (episodeNbr, episode['title'])
+        summary = "Monitored: %s\nFile: %s" % (episode["monitored"], episode['hasFile'])
+        episodeId = episode['id']
+        oc.add(DirectoryObject(key=Callback(EpisodeOptions, episodeId=episodeId), title=title, summary=summary))
+    if not len(oc):
+        return MessageContainer("Error", "No episodes found.")
+    return oc
+
+@route('%s/episodes/options' % PREFIX)
+def EpisodeOptions(episodeId):
+    request = ApiRequest("episode/%s" % episodeId)
+    title = request['title']
+    oc = ObjectContainer(title2=title)
+    oc.add(DirectoryObject(key=Callback(Stub),
+        title='Toggle Monitored Status', summary='Current status is: STUB', thumb=R(ICON)))
+    oc.add(DirectoryObject(key=Callback(Stub),
+        title='Episode Search %s' % episodeId, summary='Automatic search for this episode', thumb=R(ICON)))
+    oc.add(DirectoryObject(key=Callback(Stub),
+        title='Delete Episode', summary='Delete this episode from disk', thumb=R(ICON)))
+    return oc
+
+@route('%s/searchepisodeseries' % PREFIX)
+def SearchEpisodeSeries(seriesId, title2):
+    return MessageContainer(title2, 'Searching for episodes in seriesId:%s' % seriesId)
+
+@route('%s/deleteseries' % PREFIX)
 def DeleteSeries(seriesId, title2):
-    return MessageContainer(title2, 'Deleting  seriesId:%d' % seriesId)
+    return MessageContainer(title2, 'Deleting  seriesId:%s' % seriesId)
 
 @route('%s/thumb' % PREFIX)
 def GetThumb(url, contentType='image/jpeg', timeout=10, cacheTime=10):
@@ -174,128 +283,64 @@ def prettydate(d):
     else:
         return '{} hours ago'.format(s/3600)
 
-def human(dt, precision=2, past_tense='%s ago', future_tense='in %s'):
-    """Accept a datetime or timedelta, return a human readable delta string"""
-    delta = dt
-    if type(dt) is not type(timedelta()):
-        delta = datetime.now() - dt
-
-    the_tense = past_tense
-    if delta < timedelta(0):
-        the_tense = future_tense
-
-    d = delta2dict( delta )
-    hlist = []
-    count = 0
-    units = ( 'year', 'day', 'hour', 'minute', 'second', 'microsecond' )
-    for unit in units:
-        if count >= precision: break # met precision
-        if d[ unit ] == 0: continue # skip 0's
-        s = '' if d[ unit ] == 1 else 's' # handle plurals
-        hlist.append( '%s %s%s' % ( d[unit], unit, s ) )
-        count += 1
-    human_delta = ', '.join( hlist )
-    return the_tense % human_delta
-
-"""
-@route(PREFIX+"/seasonlist",seriesId=int, seasons=list)
-def SeasonList(seriesId, seasons, title2='Seasons'):
-    oc = ObjectContainer(title2=title2)
-    for s in seasons:
-        title='Season '+str(s['seasonNumber'])
-        if s['seasonNumber']  == 0: title='Specials'
-        thumb=R(NOTMONITORED)
-        summary='Not monitored'
-        if s['monitored']:
-            thumb=R(MONITORED)
-            summary='Monitored'
-        season=dict(key=Callback(EpisodeList, seriesId=seriesId, season=s['seasonNumber'], title2=title2), title=title, thumb=thumb, summary=summary)
-        oc.add(DirectoryObject(**season))
-    if len(oc) == 0:
-        return ObjectContainer(header=NAME, message='No seasons found.')
-    return oc
-
-@route(PREFIX+"/episodelist",seriesId=int, season=int)
-def EpisodeList(seriesId,season,title2='Episodes'):
-    oc = ObjectContainer(title2=title2)
-    episodes = API_Request(endUrl='/episode', params=dict(seriesId=seriesId))
-    if episodes == None:
-        Invalid()
-    for e in episodes:
-        if e['seasonNumber'] == season:
-            number = str(e['episodeNumber'])
-            if len(number) == 1: number = '0'+number
-            title=number+' - '+e['title']
-            oc.add(DirectoryObject(key=Callback(Stub), title=title,summary=e['overview']))
-    if len(oc) == 0:
-        return ObjectContainer(header=NAME, message='No episodes found.')
-    return oc
-
-@route(PREFIX+"/calendar")
-def Calendar(past=dict(days=0),delta=dict(weeks=1)):
-    start = TimeStampUTCString(datetime.utcnow()-Datetime.Delta(**past))
-    end = TimeStampUTCString(datetime.utcnow()+Datetime.Delta(**delta))
-    oc = ObjectContainer(title2="Calendar")
-    events = API_Request(endUrl='/calendar', params=dict(start=start,end=end))
-    if events == None:
-        return Invalid()
-    for e in events:
-        season = str(e['seasonNumber'])
-        episode = str(e['episodeNumber'])
-        dt = Datetime.ParseDate(e['airDateUtc'])+Dict['UTCOffset']
-        if len(episode) ==  1: episode = '0'+episode
-        title=PrettyDate(offset=dt)+' - '+e['series']['title']+' - '+season+'x'+episode
-        e_title=e['title']
-        e_overview=e['overview']
-        summary=''
-        if not e_title and not e_overview: summary = 'No information provided'
-        elif not e_title: summary=e_overview
-        elif not e_overview: summary=e_title
-        else: summary=e_title+' - '+e_overview
-        for coverType in e['series']['images']:
-            if coverType['coverType'] == 'poster':
-                image = coverType['url']
-        show=dict(key=Callback(Stub), title=title, summary=summary, thumb=Callback(GetThumb, image=image))
-        oc.add(DirectoryObject(**show))
-    if len(oc) == 0:
-        return ObjectContainer(header=NAME, message="No shows airing this week.")
-    return oc
-
-# NOT USED - Can't figure out what the REST API url is for 'missing'
-@route(PREFIX+"/wanted", page=int, pageSize=int)
-def Wanted(page=1,pageSize=19):
-    oc = ObjectContainer(title2='Wanted')
-    wanted = API_Request(endUrl='/missing', params=dict(page=page,pageSize=pageSize,sortKey='date',sortDir='desc'))
-    if wanted == None:
-        return Invalid()
-    for r in wanted['records']:
-        title=r['title']
-        summary=PrettyHistory(datetime.utcnow(),Datetime.ParseDate(r['airDateUtc']).replace(tzinfo=None))
-        record=dict(key=Callback(Stub), title=title, summary=summary)
-        oc.add(DirectoryObject(**record))
-    if len(oc) == 0:
-        return ObjectContainer(header=NAME, message="No wanted items.")
-    if page*pageSize < int(history['totalRecords']):
-        oc.add(NextPageObject(key=Callback(Wanted, page=page+1)))
-    return oc
-
-# Convert a datetime to ISO-8601 formatted in UTC to send to NzbDrone
+# Convert a datetime to ISO-8601 formatted in UTC to send to Sonarr
 def TimeStampUTCString(time=datetime.utcnow()):
     return str(time.isoformat('T')).split('.')[0]+'Z'
 
-# Nice relative dates
-def PrettyDate(offset, date=Datetime.Now()):
-    diff = offset.replace(tzinfo=None) - date
-    if diff.days == 0:
-        return 'Today'
-    if diff.days == 1:
-        return 'Tomorrow at ' + offset.strftime('%I:%M %p').lstrip('0')
-    if diff.days > 1 and diff.days < 7:
-        return offset.strftime('%A')+ ' at '+offset.strftime('%I:%M %p').lstrip('0')
-    if diff.days == -1:
-        return 'Yesterday'
-    if diff.days < -1 and diff.days > -7:
-        return offset.strftime('Last %A')
-    else:
-        return offset.strftime('%B %d')
-"""
+@route("%s/calendar" % PREFIX)
+def Calendar():
+    start = TimeStampUTCString(datetime.utcnow()-Datetime.Delta(days=-1))
+    end = TimeStampUTCString(datetime.utcnow()+Datetime.Delta(weeks=1))
+
+    request = ApiRequest('calendar', params={'start':start, 'end':end})
+
+    oc = ObjectContainer(title2="Calendar")
+    for episode in request:
+        seasonNbr = episode['seasonNumber']
+        episodeNbr = episode['episodeNumber']
+        episodeId = episode['id']
+        dt = Datetime.ParseDate(episode['airDateUtc'])+Dict['utcOffset']
+        episodeTitle = episode['title']
+        episodeOverview = 'No information provided'
+        if 'overview' in episode:
+            episodeOverview = episode['overview']
+        dirObj = DirectoryObject(key=Callback(EpisodeOptions, episodeId=episodeId), title=title, summary=episodeOverview)
+        for coverType in episode['series']['images']:
+            if coverType['coverType'] == "poster":
+                dirObj.thumb=Callback(GetThumb, url=coverType['url'])
+                break
+        title="%s - %dX%02d %s" % (episodeTitle, seasonNbr, episodeNbr,
+            prettydate(dt))
+        oc.add(dirObj)
+    if not len(oc):
+        return MessageContainer('WHAT?', "No Upcoming Episodes.")
+    return oc
+
+@route("%s/wanted" % PREFIX, page=int, pageSize=int)
+def Wanted(page=1, pageSize=19):
+    oc = ObjectContainer(title2='Wanted')
+    request = ApiRequest('missing', params={'page':page, 'pageSize':pageSize,
+        'sortKey':'airDateUtc', 'sortDir':'desc'})
+    for record in request['records']:
+        seasonNbr = record['seasonNumber']
+        episodeNbr = record['episodeNumber']
+        seriesTitle = record['series']['title']
+        episodeTitle = record['title']
+        date = Datetime.ParseDate(record['airDateUtc'])
+        episodeId = record['episodeId']
+        title="%s - %dX%02d %s" % (seriesTitle, seasonNbr, episodeNbr,
+            prettydate(date))
+        episodeTitle = episode['title']
+        episodeOverview = 'No information provided'
+        summary = "%s: %s" % (episodeOverview, episodeTitle)
+        dirObj = DirectoryObject(key=Callback(EpisodeOptions, episodeId=episodeId), title=title, summary=summary)
+        for coverType in episode['series']['images']:
+            if coverType['coverType'] == "poster":
+                dirObj.thumb=Callback(GetThumb, url=coverType['url'])
+                break
+        oc.add(dirObj)
+    if not len(oc):
+        return MessageContainer('Congratz', 'No missing episodes')
+    if page*pageSize < request['totalRecords']:
+        oc.add(NextPageObject(key=Callback(Wanted, page=page+1)))
+    return oc
