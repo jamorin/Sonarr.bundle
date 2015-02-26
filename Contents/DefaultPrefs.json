@@ -15,7 +15,7 @@
         "id": "base",
         "label":  "URL Base (ex. /sonarr)",
         "type": "text",
-        "default": ""
+        "default": "/"
     },
     {
         "id": "apiKey",
