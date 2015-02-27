@@ -1,25 +1,26 @@
 [
     {
-        "id": "IP",
-        "label": "IP",
+        "id": "ip",
+        "label": "Bind Address",
         "type": "text",
-        "default": "localhost" 
+        "default": "localhost"
     },
     {
-        "id": "Port",
-        "label": "Port",
+        "id": "port",
+        "label": "Port Number",
         "type": "text",
-        "default": "8989" 
+        "default": "8989"
     },
     {
-        "id": "API_Key",
-        "label": "API Key",
-        "type": "text"
+        "id": "base",
+        "label":  "URL Base (ex. /sonarr)",
+        "type": "text",
+        "default": "/"
     },
     {
-        "id": "https",
-        "label": "Use HTTPS",
-        "type": "bool",
-        "default": "False" 
+        "id": "apiKey",
+        "label": "API Key (Required)",
+        "type": "text",
+        "default": ""
     }
 ]
