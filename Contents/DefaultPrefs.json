@@ -19,14 +19,8 @@
     },
     {
         "id": "apiKey",
-        "label": "API Key",
+        "label": "API Key (Required)",
         "type": "text",
         "default": ""
-    },
-    {
-        "id": "ssl",
-        "label": "Enable SSL",
-        "type": "bool",
-        "default": "false"
     }
 ]
