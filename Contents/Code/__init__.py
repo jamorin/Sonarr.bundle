@@ -517,7 +517,7 @@ def PrettyDate(d):
     # Future
     if now < dt:
         if diff.days == -1:
-            pretty = d.strftime(L('tomorrow')+'%I:%M%p')
+            pretty = d.strftime(str(L('tomorrow'))+'%I:%M%p')
         elif diff.days < -3:
             pretty = d.strftime('%a %d %b')
         else:
@@ -527,15 +527,15 @@ def PrettyDate(d):
         if diff.days > 7:
             pretty = d.strftime('%d %b %Y')
         elif diff.days == 1:
-            pretty = L('yesterday')
+            pretty = str(L('yesterday'))
         elif diff.days > 1:
-            pretty = str(diff.days) + L('daysago')
+            pretty = str(diff.days) + str(L('daysago'))
         elif s < 3600:
-            pretty = str(s/60) + L('minutesago')
+            pretty = str(s/60) + str(L('minutesago'))
         elif s < 7200:
-            pretty = L('hourago')
+            pretty = str(L('hourago'))
         else:
-            pretty = str(s/3600) + L('hoursago')
+            pretty = str(s/3600) + str(L('hoursago'))
     return pretty
 
 def Monitored(b):
