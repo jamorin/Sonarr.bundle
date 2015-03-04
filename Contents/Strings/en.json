@@ -48,6 +48,7 @@
   "cutOff": "Cutoff",
   "saved": "Changes saved",
   "downloaded": "Downloaded: %s - %s",
+  "today": "Today at ",
   "tomorrow": "Tomorrow at ",
   "yesterday": "Yesterday",
   "daysago": " days ago",

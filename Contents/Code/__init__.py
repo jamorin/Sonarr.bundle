@@ -179,7 +179,7 @@ def History(page=1, pageSize=19):
             thumb = R('download.png')
         elif event == "downloadFailed":
             summary = L('failed')
-            thumb = R('cloud-download-failed.png')
+            thumb = R('exclamation-triangle.png')
         elif event == "grabbed":
             summary = L('grabbed')
             thumb = R('cloud-download.png')
@@ -514,22 +514,23 @@ def PrettyDate(d):
     dt = d.replace(tzinfo=None)+Dict['utcOffset']
     diff = now - dt
     s = diff.seconds
+
     # Future
-    if now < dt:
-        if diff.days == -1:
-            pretty = d.strftime(str(L('tomorrow'))+'%I:%M%p')
-        elif diff.days < -3:
-            pretty = d.strftime('%a %d %b')
+    if dt > now:
+        if now.day == dt.day:
+            pretty = dt.strftime(str(L('today')+'%I:%M%p'))
+        elif (now+Datetime.Delta(days=1)).day == dt.day:
+            pretty = dt.strftime(str(L('tomorrow'))+'%I:%M%p')
         else:
-            pretty = d.strftime('%a %I:%M%p')
+            pretty = dt.strftime('%a %I:%M%p')
     # Past
     else:
         if diff.days > 7:
-            pretty = d.strftime('%d %b %Y')
-        elif diff.days == 1:
-            pretty = str(L('yesterday'))
+            pretty = dt.strftime('%d %b %Y')
         elif diff.days > 1:
             pretty = str(diff.days) + str(L('daysago'))
+        elif diff.days == 1:
+            pretty = str(L('yesterday'))
         elif s < 3600:
             pretty = str(s/60) + str(L('minutesago'))
         elif s < 7200:
@@ -550,7 +551,7 @@ def TimeStampUTCString(time=datetime.utcnow()):
 
 @route("%s/calendar" % PREFIX)
 def Calendar():
-    start = TimeStampUTCString(datetime.utcnow()-Datetime.Delta(days=0))
+    start = TimeStampUTCString(datetime.utcnow()-Datetime.Delta(hours=6))
     end = TimeStampUTCString(datetime.utcnow()+Datetime.Delta(weeks=1))
 
     url = Dict['apiUrl']+'calendar'
@@ -566,7 +567,7 @@ def Calendar():
         seasonNbr = episode['seasonNumber']
         episodeNbr = episode['episodeNumber']
         episodeId = episode['id']
-        dt = Datetime.ParseDate(episode['airDateUtc'])+Dict['utcOffset']
+        dt = Datetime.ParseDate(episode['airDateUtc'])
         episodeTitle = episode['title']
         episodeOverview = L("noInfo")
         if 'overview' in episode:
