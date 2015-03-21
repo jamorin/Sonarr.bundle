@@ -58,7 +58,7 @@ def Series():
         seriesId = series['id']
         seasons = series['seasonCount']
         status = series['status']
-        network = series['network']
+        network = series.get('network', L('unknown'))
         monitored = series['monitored']
         summary = "{}: {}  {}: {}  {}: {}  {}: {}".format(L('status'), status,
             L('network'), network, L('monitored'), monitored, L('seasons'), seasons)
@@ -97,12 +97,8 @@ def SeriesSearch(query):
         newSeries = {'tvdbId': tvdbId, 'title': title, 'profileId': profile,
             'titleSlug': titleSlug, 'seasons': seasons, 'seasonFolder': seasonFolder,
             'rootFolderPath': rootFolderPath}
-        overview = L("noInfo")
-        network = L("unknown")
-        if 'overview' in series:
-            overview = series['overview']
-        if 'network' in series:
-            network = series['network']
+        network = series.get('network', L('unknown'))
+        overview = series.get('overview', L('noInfo'))
         dirObj = DirectoryObject(key=Callback(AddSeries, series=newSeries),
             title=title, summary='Network: %s Description: %s' % (network, overview))
         if 'remotePoster' in series:
@@ -445,9 +441,7 @@ def Episodes(seriesId, seasonId):
             title = "[X] "+title
         else:
             title = "[ ] "+title
-        overview = L("noInfo")
-        if 'overview' in episode:
-            overview = episode['overview']
+        overview = episode.get('overview', L('noInfo'))
         summary = str(L("downloaded")) % (episode['hasFile'], overview)
         episodeId = episode['id']
         oc.add(DirectoryObject(key=Callback(EpisodeOptions, episodeId=episodeId),
@@ -569,9 +563,7 @@ def Calendar():
         episodeId = episode['id']
         dt = Datetime.ParseDate(episode['airDateUtc'])
         episodeTitle = episode['title']
-        episodeOverview = L("noInfo")
-        if 'overview' in episode:
-            episodeOverview = episode['overview']
+        episodeOverview = episode.get('overview', L('noInfo'))
         title="%s - %dX%02d - %s" % (episodeTitle, seasonNbr, episodeNbr,
             PrettyDate(dt))
         dirObj = DirectoryObject(key=Callback(EpisodeOptions, episodeId=episodeId),
