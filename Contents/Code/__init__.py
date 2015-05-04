@@ -1,17 +1,20 @@
-from mock_framework import *
+# from mock_framework import *
 from datetime import datetime
 import requests
+import requests_cache
 
 PREFIX = "/video/sonarr"
 NAME = "Sonarr"
 
 
 def Start():
-    # requests.packages.urllib3.disable_warnings()
+    requests.packages.urllib3.disable_warnings()
     ObjectContainer.art = R("logo.png")
     ObjectContainer.title1 = NAME
     ObjectContainer.title2 = NAME
     DirectoryObject.thumb = R("question-circle.png")
+    requests_cache.install_cache("test_cache", backend="memory", expire_after=3600)
+    requests_cache.clear()
     local_hour = Datetime.Now().replace(minute=0, second=0, microsecond=0)
     utc_hour = datetime.utcnow().replace(minute=0, second=0, microsecond=0, tzinfo=None)
     Dict["utc_offset"] = local_hour - utc_hour
@@ -46,13 +49,14 @@ def main_menu():
 def series():
     url = Dict["apiUrl"] + "series"
     try:
-        r = requests.get(url, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
     oc = ObjectContainer(title2="Series")
-    oc.add(InputDirectoryObject(key=Callback(series_search), title=L("addSeries"), thumb=R("search-plus.png"),
+    oc.add(InputDirectoryObject(key=Callback(series_search), title=L("addSeries"), thumb=R("search.png"),
                                 prompt=L("seriesSearch")))
     for s in sorted(r.json(), key=lambda x: x["sortTitle"]):
         title = s["title"]
@@ -77,15 +81,17 @@ def series():
 def series_search(query):
     url = Dict["apiUrl"] + "series/lookup"
     try:
-        r = requests.get(url, params={"term": query}, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.get(url, params={"term": query}, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
     oc = ObjectContainer(title2="Results")
     # Default to first found profile
-    profile = requests.get(Dict["apiUrl"] + "qualityprofile", headers=Dict["headers"]).json()[0]["id"]
-    root_folder_path = requests.get(Dict["apiUrl"] + "rootfolder", headers=Dict["headers"]).json()[0]["path"]
+    with requests_cache.disabled():
+        profile = requests.get(Dict["apiUrl"] + "qualityprofile", headers=Dict["headers"]).json()[0]["id"]
+        root_folder_path = requests.get(Dict["apiUrl"] + "rootfolder", headers=Dict["headers"]).json()[0]["path"]
     for s in r.json():
         tvdb_id = s["tvdbId"]
         title = s["title"]
@@ -102,17 +108,16 @@ def series_search(query):
         if "remotePoster" in s:
             do.thumb = Callback(get_thumb, url=s["remotePoster"])
         oc.add(do)
-    if not len(oc):
-        return MessageContainer(L("status"), L("noResults"))
     return oc
 
 
-@route("%s/series/add" % PREFIX, series=dict)
+@route("%s/series/add" % PREFIX, series_payload=dict)
 def add_series(series_payload):
     url = Dict["apiUrl"] + "series"
     try:
-        r = requests.post(url, json=series_payload, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.post(url, json=series_payload, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -123,8 +128,9 @@ def add_series(series_payload):
 def queue():
     url = Dict["apiUrl"] + "queue"
     try:
-        r = requests.get(url, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -144,18 +150,17 @@ def queue():
                 do.thumb = Callback(get_thumb, url=coverType["url"])
                 break
         oc.add(do)
-        # if not len(oc):
-        # return MessageContainer(L("empty"), L("noResults"))
     return oc
 
 
-@route("%s/history" % PREFIX, page=int, pageSize=int)
+@route("%s/history" % PREFIX, page=int, page_size=int)
 def history(page=1, page_size=19):
     url = Dict["apiUrl"] + "history"
     try:
-        r = requests.get(url, params={"page": page, "pageSize": page_size, "sortKey": "date", "sortDir": "desc"},
-                         headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.get(url, params={"page": page, "pageSize": page_size, "sortKey": "date", "sortDir": "desc"},
+                             headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -168,7 +173,7 @@ def history(page=1, page_size=19):
         episode_quality = record["quality"]["quality"]["name"]
         date = Datetime.ParseDate(record["date"])
         event = record["eventType"]
-        episode_id = record["episode_id"]
+        episode_id = record["episodeId"]
         if event == "downloadFolderImported":
             summary = L("imported")
             thumb = R("download.png")
@@ -188,8 +193,6 @@ def history(page=1, page_size=19):
         summary = "%s: %s  %s: %s" % (summary, episode_title, L("quality"), episode_quality)
         oc.add(DirectoryObject(key=Callback(episode_options, episode_id=episode_id), title=title, summary=summary,
                                thumb=thumb))
-    if not len(oc):
-        return MessageContainer(L("history"), L("noResults"))
     if page * page_size < r.json()["totalRecords"]:
         oc.add(NextPageObject(key=Callback(history, page=page + 1)))
     return oc
@@ -199,8 +202,9 @@ def history(page=1, page_size=19):
 def series_options(series_id, title2):
     url = Dict["apiUrl"] + "series/%s" % series_id
     try:
-        r = requests.get(url, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -231,8 +235,9 @@ def delete_series_popup(entity_id, title2):
 def delete_series(entity_id):
     url = Dict["apiUrl"] + "series/%s" % entity_id
     try:
-        r = requests.delete(url, params={"deleteFiles": True}, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.delete(url, params={"deleteFiles": True}, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -243,18 +248,18 @@ def delete_series(entity_id):
 def quality_profile(series_id):
     url = Dict["apiUrl"] + "series/%s" % series_id
     try:
-        r = requests.get(url, headers=Dict["headers"])
-        r.raise_for_status()
-        s = r.json()
-        url = Dict["apiUrl"] + "qualityprofile"
-        r = requests.get(url, headers=Dict["headers"])
-        r.raise_for_status()
-        profiles = r.json()
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
+            s = r.json()
+            url = Dict["apiUrl"] + "qualityprofile"
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
     oc = ObjectContainer(title2=L("quality"))
-    for profile in profiles:
+    for profile in r.json():
         title = profile["name"]
         quality_id = profile["id"]
         if quality_id == s["profileId"]:
@@ -264,8 +269,6 @@ def quality_profile(series_id):
             thumb = R("circle-o.png")
         oc.add(DirectoryObject(key=Callback(quality_profile_set, series_id=series_id, quality_id=quality_id),
                                title=title, summary="%s: %s" % (L("cutOff"), profile["cutoff"]["name"]), thumb=thumb))
-    if not len(oc):
-        return MessageContainer(L("quality"), L("noResults"))
     return oc
 
 
@@ -273,13 +276,14 @@ def quality_profile(series_id):
 def quality_profile_set(series_id, quality_id):
     url = Dict["apiUrl"] + "series/%s" % series_id
     try:
-        r = requests.get(url, headers=Dict["headers"])
-        r.raise_for_status()
-        s = r.json()
-        s["profileId"] = quality_id
-        url = Dict["apiUrl"] + "series"
-        r = requests.put(url, json=s, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
+            s = r.json()
+            s["profileId"] = quality_id
+            url = Dict["apiUrl"] + "series"
+            r = requests.put(url, json=s, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -301,8 +305,9 @@ def monitor_toggle(series_id, monitor_state, season_nbr):
     url = Dict["apiUrl"] + "series/%s" % series_id
     Log.Debug("Season: %d" % season_nbr)
     try:
-        r = requests.get(url, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
 
         url = Dict["apiUrl"] + "series"
         puts = r.json()
@@ -315,8 +320,9 @@ def monitor_toggle(series_id, monitor_state, season_nbr):
                 if season["seasonNumber"] == season_nbr:
                     season["monitored"] = monitor_state
                     break
-        r = requests.put(url, json=puts, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.put(url, json=puts, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -327,8 +333,9 @@ def monitor_toggle(series_id, monitor_state, season_nbr):
 def seasons(series_id):
     url = Dict["apiUrl"] + "series/%s" % series_id
     try:
-        r = requests.get(url, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -341,8 +348,6 @@ def seasons(series_id):
         oc.add(DirectoryObject(key=Callback(seasons_options, series_id=series_id, season_id=season_nbr,
                                             monitored=season["monitored"]), title=season_str, summary=season_str,
                                thumb=thumb))
-    if not len(oc):
-        return MessageContainer(title, L("noResults"))
     return oc
 
 
@@ -375,8 +380,9 @@ def command_search(series_id=-1, season_id=-1, episode_id=-1):
             Log.Info("Season Search:%d for Series:%d" % (season_id, series_id))
             params = {"name": "SeasonSearch", "seriesId": int(series_id), "seasonNumber": season_id}
         Log.Debug("Command: %s" % url)
-        r = requests.post(url, json=params, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.post(url, json=params, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -396,25 +402,26 @@ def delete_season(series_id, season_id):
     url = Dict["apiUrl"] + "episodefile"
     season_nbr = int(season_id)
     try:
-        r = requests.get(url, params={"seriesId": int(series_id)}, headers=Dict["headers"])
-        r.raise_for_status()
-        for episode in r.json():
-            if episode["seasonNumber"] == season_nbr:
-                Log.Info("Deleting: %d" % episode["id"])
-                r = requests.delete(url + "/%s" % episode["id"], headers=Dict["headers"])
-                r.raise_for_status()
-        url = Dict["apiUrl"] + "series/%s" % series_id
-        r = requests.get(url, headers=Dict["headers"])
-        r.raise_for_status()
-        url = Dict["apiUrl"] + "series"
-        puts = r.json()
-        for season in puts["seasons"]:
-            if season["seasonNumber"] == season_nbr:
-                Log.Info("Unmonitoring S%d for series: %s" % (season_nbr, series_id))
-                season["monitored"] = False
-                break
-        r = requests.put(url, json=puts, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.get(url, params={"seriesId": int(series_id)}, headers=Dict["headers"])
+            r.raise_for_status()
+            for episode in r.json():
+                if episode["seasonNumber"] == season_nbr:
+                    Log.Info("Deleting: %d" % episode["id"])
+                    r = requests.delete(url + "/%s" % episode["id"], headers=Dict["headers"])
+                    r.raise_for_status()
+            url = Dict["apiUrl"] + "series/%s" % series_id
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
+            url = Dict["apiUrl"] + "series"
+            puts = r.json()
+            for season in puts["seasons"]:
+                if season["seasonNumber"] == season_nbr:
+                    Log.Info("Unmonitoring S%d for series: %s" % (season_nbr, series_id))
+                    season["monitored"] = False
+                    break
+            r = requests.put(url, json=puts, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -425,8 +432,9 @@ def delete_season(series_id, season_id):
 def episodes(series_id, season_id):
     url = Dict["apiUrl"] + "episode"
     try:
-        r = requests.get(url, params={"seriesId": series_id}, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.get(url, params={"seriesId": series_id}, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -449,8 +457,6 @@ def episodes(series_id, season_id):
         episode_id = episode["id"]
         oc.add(DirectoryObject(key=Callback(episode_options, episode_id=episode_id), title=title, summary=summary,
                                thumb=thumb))
-    if not len(oc):
-        return MessageContainer(L("status"), L("noResults"))
     return oc
 
 
@@ -458,8 +464,9 @@ def episodes(series_id, season_id):
 def episode_options(episode_id):
     url = Dict["apiUrl"] + "episode/%s" % episode_id
     try:
-        r = requests.get(url, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -491,13 +498,14 @@ def episode_monitor_toggle(episode_id, monitor_state):
     url = Dict["apiUrl"] + "episode/%s" % episode_id
     Log.Debug("Episode: %d" % episode_id)
     try:
-        r = requests.get(url, headers=Dict["headers"])
-        r.raise_for_status()
-        url = Dict["apiUrl"] + "episode"
-        puts = r.json()
-        puts["monitored"] = monitor_state
-        r = requests.put(url, json=puts, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
+            url = Dict["apiUrl"] + "episode"
+            puts = r.json()
+            puts["monitored"] = monitor_state
+            r = requests.put(url, json=puts, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -505,8 +513,17 @@ def episode_monitor_toggle(episode_id, monitor_state):
 
 
 @route("%s/thumb" % PREFIX)
-def get_thumb(url, content_type="image/jpeg", timeout=15, cache_time=3600):
-    data = HTTP.Request(url=url, timeout=timeout, cacheTime=cache_time)
+def get_thumb(url, content_type="image/jpeg", timeout=10, use_cache=True):
+    try:
+        if not use_cache:
+            with requests_cache.disabled():
+                data = requests.get(url, timeout=timeout)
+        else:
+            data = requests.get(url, timeout=timeout)
+        Log.Debug("thumb from_cache: %s" % data.from_cache)
+    except Exception as e:
+        Log.Critical(e.message)
+        return DataObject(Resource.Load("question-circle.png", binary=True), "image/png")
     return DataObject(data.content, content_type)
 
 
@@ -515,7 +532,6 @@ def pretty_datetime(d):
     dt = d.replace(tzinfo=None) + Dict["utc_offset"]
     diff = now - dt
     s = diff.seconds
-
     # Future
     if dt > now:
         if now.day == dt.day:
@@ -560,8 +576,9 @@ def calendar():
 
     url = Dict["apiUrl"] + "calendar"
     try:
-        r = requests.get(url, params={"start": start, "end": end}, headers=Dict["headers"])
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.get(url, params={"start": start, "end": end}, headers=Dict["headers"])
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -582,20 +599,20 @@ def calendar():
                 do.thumb = Callback(get_thumb, url=coverType["url"])
                 break
         oc.add(do)
-    if not len(oc):
-        return MessageContainer(L("status"), L("noResults"))
     return oc
 
 
-@route("%s/wanted" % PREFIX, page=int, pageSize=int)
+@route("%s/wanted" % PREFIX, page=int, page_size=int)
 def wanted(page=1, page_size=19):
     oc = ObjectContainer(title2="Wanted")
 
     url = Dict["apiUrl"] + "missing"
     try:
-        r = requests.get(url, params={"page": page, "pageSize": page_size, "sortKey": "airDateUtc", "sortDir": "desc"},
-                         headers=Dict["headers"], verify=False)
-        r.raise_for_status()
+        with requests_cache.disabled():
+            r = requests.get(url,
+                             params={"page": page, "pageSize": page_size, "sortKey": "airDateUtc", "sortDir": "desc"},
+                             headers=Dict["headers"], verify=False)
+            r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
@@ -615,8 +632,6 @@ def wanted(page=1, page_size=19):
                 do.thumb = Callback(get_thumb, url=coverType["url"])
                 break
         oc.add(do)
-    if not len(oc):
-        return MessageContainer(L("status"), L("noResults"))
     if page * page_size < r.json()["totalRecords"]:
         oc.add(NextPageObject(key=Callback(wanted, page=page + 1)))
     return oc

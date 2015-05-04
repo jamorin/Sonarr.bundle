@@ -31,7 +31,6 @@
   "success": "Success",
   "error": "Error",
   "status": "Status",
-  "noResults": "No results",
   "network": "Network",
   "monitored": "Monitored",
   "monitorConfirm": "Confirm changing monitoring to %s",
