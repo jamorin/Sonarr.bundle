@@ -1,7 +1,7 @@
 [
     {
         "id": "ip",
-        "label": "Bind Address",
+        "label": "Address",
         "type": "text",
         "default": "localhost"
     },

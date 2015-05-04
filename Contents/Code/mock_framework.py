@@ -14,8 +14,10 @@ def L(res):
 class logger(object):
     def Info(self, msg):
         pass
+
     def Debug(self, msg):
         pass
+
     def Critical(self, msg):
         pass
 
@@ -23,8 +25,10 @@ class logger(object):
 class ObjectContainer(object):
     def __init__(self, *args, **kwargs):
         pass
+
     def __len__(self):
         return 0
+
     def add(self, container):
         pass
 
@@ -57,7 +61,8 @@ class Datetime(object):
 
 
 class HTTP(object):
-    def Request(self, *args, **kwargs):
+    @staticmethod
+    def Request(*args, **kwargs):
         return ""
 
 
@@ -85,10 +90,12 @@ class PopupDirectoryObject(ObjectContainer):
 def handler(*args, **kwargs):
     def func_wrapper(name):
         pass
+
     return func_wrapper
 
 
 def route(*args, **kwargs):
     return handler(args, kwargs)
+
 
 Log = logger()
