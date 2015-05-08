@@ -32,6 +32,7 @@ def ValidatePrefs():
 
 @handler(PREFIX, NAME, "1024.png", "logo.png")
 def main_menu():
+    Log.Debug(type(L))
     oc = ObjectContainer()
     oc.add(DirectoryObject(key=Callback(series), title=L("series"), summary=L("seriesInfo"), thumb=R("play.png")))
     oc.add(DirectoryObject(key=Callback(calendar), title=L("calendar"), summary=L("calendarInfo"),
@@ -392,7 +393,7 @@ def series_delete(entity_id):
     url = Dict["apiUrl"] + "series/%s" % entity_id
     try:
         with requests_cache.disabled():
-            r = requests.delete(url, params={"deleteFiles": True}, headers=Dict["headers"])
+            r = requests.delete(url, params={"deleteFiles": Prefs["delete_files"]}, headers=Dict["headers"])
             r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
@@ -453,15 +454,14 @@ def series_lookup(query):
     oc = ObjectContainer(title2="Results")
     # Default to first found profile
     with requests_cache.disabled():
-        profile = requests.get(Dict["apiUrl"] + "qualityprofile", headers=Dict["headers"]).json()[0]["id"]
+        profile = requests.get(Dict["apiUrl"] + "profile", headers=Dict["headers"]).json()[0]["id"]
         root_folder_path = requests.get(Dict["apiUrl"] + "rootfolder", headers=Dict["headers"]).json()[0]["path"]
     for s in r.json():
         tvdb_id = s["tvdbId"]
         title = s["title"]
         title_slug = s["titleSlug"]
         nbr_seasons = s["seasons"]
-        # Default to use season folder.
-        season_folder = True
+        season_folder = Prefs["season_folder"]
         new_series = {"tvdbId": tvdb_id, "title": title, "profileId": profile, "titleSlug": title_slug,
                       "seasons": nbr_seasons, "seasonFolder": season_folder, "rootFolderPath": root_folder_path}
         network = s.get("network", L("unknown"))
@@ -507,7 +507,7 @@ def series_profile(series_id):
             r = requests.get(url, headers=Dict["headers"])
             r.raise_for_status()
             s = r.json()
-            url = Dict["apiUrl"] + "qualityprofile"
+            url = Dict["apiUrl"] + "profile"
             r = requests.get(url, headers=Dict["headers"])
             r.raise_for_status()
     except Exception as e:
@@ -599,7 +599,6 @@ def pretty_datetime(d):
     now = Datetime.Now()
     dt = d.replace(tzinfo=None) + Dict["utc_offset"]
     diff = now - dt
-    s = diff.seconds
     # Future
     if dt > now:
         if now.day == dt.day:
@@ -608,8 +607,9 @@ def pretty_datetime(d):
             pretty = dt.strftime(str(L("tomorrow")) + "%I:%M%p")
         else:
             pretty = dt.strftime("%a %I:%M%p")
-    # Past
+# Past
     else:
+        s = diff.seconds
         if diff.days > 7:
             pretty = dt.strftime("%d %b %Y")
         elif diff.days > 1:

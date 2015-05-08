@@ -1,26 +1,38 @@
 [
-    {
-        "id": "ip",
-        "label": "Address",
-        "type": "text",
-        "default": "localhost"
-    },
-    {
-        "id": "port",
-        "label": "Port Number",
-        "type": "text",
-        "default": "8989"
-    },
-    {
-        "id": "base",
-        "label":  "URL Base (ex. /sonarr)",
-        "type": "text",
-        "default": ""
-    },
-    {
-        "id": "apiKey",
-        "label": "API Key",
-        "type": "text",
-        "default": ""
-    }
+  {
+    "id": "ip",
+    "label": "Address",
+    "type": "text",
+    "default": "localhost"
+  },
+  {
+    "id": "port",
+    "label": "Port Number",
+    "type": "text",
+    "default": "8989"
+  },
+  {
+    "id": "base",
+    "label":  "URL Base (ex. /sonarr)",
+    "type": "text",
+    "default": ""
+  },
+  {
+    "id": "apiKey",
+    "label": "API Key",
+    "type": "text",
+    "default": ""
+  },
+  {
+    "id": "season_folder",
+    "label": "Use Season Folder",
+    "type": "bool",
+    "default": "true"
+  },
+  {
+    "id": "delete_files",
+    "label": "Delete all files from disk (when removing series)",
+    "type": "bool",
+    "default": "false"
+  }
 ]
