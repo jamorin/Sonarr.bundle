@@ -45,107 +45,32 @@ def main_menu():
     return oc
 
 
-@route("%s/series" % PREFIX)
-def series():
-    url = Dict["apiUrl"] + "series"
+@route("%s/calendar/list" % PREFIX)
+def calendar():
+    start = timestamp(datetime.utcnow() - Datetime.Delta(hours=6))
+    end = timestamp(datetime.utcnow() + Datetime.Delta(weeks=1))
+
+    url = Dict["apiUrl"] + "calendar"
     try:
         with requests_cache.disabled():
-            r = requests.get(url, headers=Dict["headers"])
+            r = requests.get(url, params={"start": start, "end": end}, headers=Dict["headers"])
             r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
-    oc = ObjectContainer(title2="Series")
-    oc.add(InputDirectoryObject(key=Callback(series_search), title=L("addSeries"), thumb=R("search.png"),
-                                prompt=L("seriesSearch")))
-    for s in sorted(r.json(), key=lambda x: x["sortTitle"]):
-        title = s["title"]
-        series_id = s["id"]
-        season_count = s["seasonCount"]
-        status = s["status"]
-        network = s.get("network", L("unknown"))
-        monitored = s["monitored"]
-        summary = "{}: {}  {}: {}  {}: {}  {}: {}".format(L("status"), status, L("network"), network, L("monitored"),
-                                                          monitored, L("seasons"), season_count)
-        do = DirectoryObject(key=Callback(series_options, series_id=series_id, title2=title), title=title,
-                             summary=summary)
-        for coverType in s["images"]:
-            if coverType["coverType"] == "poster":
-                do.thumb = Callback(get_thumb, url=Dict["host"] + coverType["url"])
-                break
-        oc.add(do)
-    return oc
 
-
-@route("%s/series/search" % PREFIX)
-def series_search(query):
-    url = Dict["apiUrl"] + "series/lookup"
-    try:
-        with requests_cache.disabled():
-            r = requests.get(url, params={"term": query}, headers=Dict["headers"])
-            r.raise_for_status()
-    except Exception as e:
-        Log.Critical(e.message)
-        return MessageContainer(L("error"), e.message)
-    oc = ObjectContainer(title2="Results")
-    # Default to first found profile
-    with requests_cache.disabled():
-        profile = requests.get(Dict["apiUrl"] + "qualityprofile", headers=Dict["headers"]).json()[0]["id"]
-        root_folder_path = requests.get(Dict["apiUrl"] + "rootfolder", headers=Dict["headers"]).json()[0]["path"]
-    for s in r.json():
-        tvdb_id = s["tvdbId"]
-        title = s["title"]
-        title_slug = s["titleSlug"]
-        nbr_seasons = s["seasons"]
-        # Default to use season folder.
-        season_folder = True
-        new_series = {"tvdbId": tvdb_id, "title": title, "profileId": profile, "titleSlug": title_slug,
-                      "seasons": nbr_seasons, "seasonFolder": season_folder, "rootFolderPath": root_folder_path}
-        network = s.get("network", L("unknown"))
-        overview = s.get("overview", L("noInfo"))
-        do = DirectoryObject(key=Callback(add_series, series=new_series), title=title,
-                             summary="Network: %s Description: %s" % (network, overview))
-        if "remotePoster" in s:
-            do.thumb = Callback(get_thumb, url=s["remotePoster"])
-        oc.add(do)
-    return oc
-
-
-@route("%s/series/add" % PREFIX, series_payload=dict)
-def add_series(series_payload):
-    url = Dict["apiUrl"] + "series"
-    try:
-        with requests_cache.disabled():
-            r = requests.post(url, json=series_payload, headers=Dict["headers"])
-            r.raise_for_status()
-    except Exception as e:
-        Log.Critical(e.message)
-        return MessageContainer(L("error"), e.message)
-    return MessageContainer(L("success"), L("addSeriesInfo"))
-
-
-@route("%s/queue" % PREFIX)
-def queue():
-    url = Dict["apiUrl"] + "queue"
-    try:
-        with requests_cache.disabled():
-            r = requests.get(url, headers=Dict["headers"])
-            r.raise_for_status()
-    except Exception as e:
-        Log.Critical(e.message)
-        return MessageContainer(L("error"), e.message)
-    oc = ObjectContainer(title2=L("queue"))
-    for episode in r.json():
-        status = episode["status"]
-        title = episode["title"]
-        series_title = episode["series"]["title"]
-        summary = "Status: {}  Title: {}".format(status, title)
-        season_nbr = episode["episode"]["seasonNumber"]
-        episode_nbr = episode["episode"]["episodeNumber"]
-        episode_id = episode["episode"]["id"]
-        header = "%s - %dX%02d" % (series_title, season_nbr, episode_nbr)
-        do = DirectoryObject(key=Callback(episode_options, episode_id=episode_id), title=header, summary=summary)
-        for coverType in episode["series"]["images"]:
+    oc = ObjectContainer(title2=L("calendar"))
+    for e in r.json():
+        season_nbr = e["seasonNumber"]
+        episode_nbr = e["episodeNumber"]
+        episode_id = e["id"]
+        dt = Datetime.ParseDate(e["airDateUtc"])
+        episode_title = e["title"]
+        episode_overview = e.get("overview", L("noInfo"))
+        title = "%s - %dX%02d - %s" % (episode_title, season_nbr, episode_nbr, pretty_datetime(dt))
+        do = DirectoryObject(key=Callback(episode_options, episode_id=episode_id), title=title,
+                             summary=episode_overview)
+        for coverType in e["series"]["images"]:
             if coverType["coverType"] == "poster":
                 do.thumb = Callback(get_thumb, url=coverType["url"])
                 break
@@ -153,7 +78,91 @@ def queue():
     return oc
 
 
-@route("%s/history" % PREFIX, page=int, page_size=int)
+@route("%s/episode/list" % PREFIX)
+def episode(series_id, season_id):
+    url = Dict["apiUrl"] + "episode"
+    try:
+        with requests_cache.disabled():
+            r = requests.get(url, params={"seriesId": series_id}, headers=Dict["headers"])
+            r.raise_for_status()
+    except Exception as e:
+        Log.Critical(e.message)
+        return MessageContainer(L("error"), e.message)
+    request = r.json()
+    series_title = request[0]["series"]["title"]
+    oc = ObjectContainer(title2=series_title)
+    for e in reversed(request):
+        season_nbr = str(e["seasonNumber"])
+        if not season_nbr == season_id:
+            continue
+        thumb = monitor_badge(e["monitored"])
+        episode_nbr = e["episodeNumber"]
+        title = "%d - %s" % (episode_nbr, e["title"])
+        if e["hasFile"]:
+            title = "[X] " + title
+        else:
+            title = "[ ] " + title
+        overview = e.get("overview", L("noInfo"))
+        summary = str(L("downloaded")) % (e["hasFile"], overview)
+        episode_id = e["id"]
+        oc.add(DirectoryObject(key=Callback(episode_options, episode_id=episode_id), title=title, summary=summary,
+                               thumb=thumb))
+    return oc
+
+
+@route("%s/episode/monitor" % PREFIX, episode_id=int, monitor_state=bool)
+def episode_monitor(episode_id, monitor_state):
+    oc = ObjectContainer()
+    thumb = monitor_badge(monitor_state)
+    oc.add(DirectoryObject(key=Callback(episode_monitor_set, episode_id=episode_id, monitor_state=monitor_state),
+                           title="Set Monitoring: %s" % monitor_state,
+                           summary=str(L("monitorConfirm")) % monitor_state, thumb=thumb))
+    return oc
+
+
+@route("%s/episode/monitor/set" % PREFIX, episode_id=int, monitor_state=bool)
+def episode_monitor_set(episode_id, monitor_state):
+    url = Dict["apiUrl"] + "episode/%s" % episode_id
+    Log.Debug("Episode: %d" % episode_id)
+    try:
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
+            url = Dict["apiUrl"] + "episode"
+            puts = r.json()
+            puts["monitored"] = monitor_state
+            r = requests.put(url, json=puts, headers=Dict["headers"])
+            r.raise_for_status()
+    except Exception as e:
+        Log.Critical(e.message)
+        return MessageContainer(L("error"), e.message)
+    return MessageContainer(L("success"), str(L("monitorSet")) % monitor_state)
+
+
+@route("%s/episode/options" % PREFIX)
+def episode_options(episode_id):
+    url = Dict["apiUrl"] + "episode/%s" % episode_id
+    try:
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
+    except Exception as e:
+        Log.Critical(e.message)
+        return MessageContainer(L("error"), e.message)
+    e = r.json()
+    title = e["title"]
+    episode_id = e["id"]
+    monitored = e["monitored"]
+    thumb = monitor_badge(monitored)
+    oc = ObjectContainer(title2=title)
+    oc.add(DirectoryObject(key=Callback(episode_monitor, episode_id=episode_id, monitor_state=(not monitored)),
+                           title=L("toggleMonitor"), thumb=thumb))
+    oc.add(DirectoryObject(key=Callback(search, episode_id=int(episode_id)), title=L("episodeSearch"),
+                           summary=L("episodeSearchInfo"), thumb=R("search.png")))
+    return oc
+
+
+@route("%s/history/list" % PREFIX, page=int, page_size=int)
 def history(page=1, page_size=19):
     url = Dict["apiUrl"] + "history"
     try:
@@ -198,110 +207,18 @@ def history(page=1, page_size=19):
     return oc
 
 
-@route("%s/series/options" % PREFIX)
-def series_options(series_id, title2):
-    url = Dict["apiUrl"] + "series/%s" % series_id
-    try:
-        with requests_cache.disabled():
-            r = requests.get(url, headers=Dict["headers"])
-            r.raise_for_status()
-    except Exception as e:
-        Log.Critical(e.message)
-        return MessageContainer(L("error"), e.message)
-    monitored = r.json()["monitored"]
-    thumb = monitor_badge(monitored)
-    oc = ObjectContainer(title2=title2)
-    oc.add(DirectoryObject(key=Callback(seasons, series_id=series_id), title=L("listSeasons"), thumb=R("th-list.png")))
-    oc.add(PopupDirectoryObject(key=Callback(monitor, series_id=series_id, monitor_state=(not monitored)),
-                                title=L("toggleMonitor"), summary="%s: %s" % (L("monitored"), monitored), thumb=thumb))
-    oc.add(DirectoryObject(key=Callback(quality_profile, series_id=series_id), title=L("changeQuality"),
-                           thumb=R("wrench.png")))
-    oc.add(DirectoryObject(key=Callback(command_search, series_id=int(series_id)), title=L("seriesSearch"),
-                           thumb=R("search.png")))
-    oc.add(DirectoryObject(key=Callback(delete_series_popup, entity_id=series_id, title2=title2),
-                           title=L("deleteSeries"), thumb=R("trash-o.png")))
-    return oc
-
-
-@route("%s/delete/popup" % PREFIX)
-def delete_series_popup(entity_id, title2):
-    oc = ObjectContainer(title2=title2)
-    oc.add(DirectoryObject(key=Callback(delete_series, entity_id=entity_id), title=L("confirmDelete"),
-                           summary=L("fileWarn"), thumb=R("exclamation-triangle.png")))
-    return oc
-
-
-@route("%s/delete/execute" % PREFIX)
-def delete_series(entity_id):
-    url = Dict["apiUrl"] + "series/%s" % entity_id
-    try:
-        with requests_cache.disabled():
-            r = requests.delete(url, params={"deleteFiles": True}, headers=Dict["headers"])
-            r.raise_for_status()
-    except Exception as e:
-        Log.Critical(e.message)
-        return MessageContainer(L("error"), e.message)
-    return MessageContainer(L("success"), L("deleted"))
-
-
-@route("%s/qualityprofile" % PREFIX)
-def quality_profile(series_id):
-    url = Dict["apiUrl"] + "series/%s" % series_id
-    try:
-        with requests_cache.disabled():
-            r = requests.get(url, headers=Dict["headers"])
-            r.raise_for_status()
-            s = r.json()
-            url = Dict["apiUrl"] + "qualityprofile"
-            r = requests.get(url, headers=Dict["headers"])
-            r.raise_for_status()
-    except Exception as e:
-        Log.Critical(e.message)
-        return MessageContainer(L("error"), e.message)
-    oc = ObjectContainer(title2=L("quality"))
-    for profile in r.json():
-        title = profile["name"]
-        quality_id = profile["id"]
-        if quality_id == s["profileId"]:
-            title += L("current")
-            thumb = R("square.png")
-        else:
-            thumb = R("circle-o.png")
-        oc.add(DirectoryObject(key=Callback(quality_profile_set, series_id=series_id, quality_id=quality_id),
-                               title=title, summary="%s: %s" % (L("cutOff"), profile["cutoff"]["name"]), thumb=thumb))
-    return oc
-
-
-@route("%s/qualityprofile/set" % PREFIX, quality_id=int)
-def quality_profile_set(series_id, quality_id):
-    url = Dict["apiUrl"] + "series/%s" % series_id
-    try:
-        with requests_cache.disabled():
-            r = requests.get(url, headers=Dict["headers"])
-            r.raise_for_status()
-            s = r.json()
-            s["profileId"] = quality_id
-            url = Dict["apiUrl"] + "series"
-            r = requests.put(url, json=s, headers=Dict["headers"])
-            r.raise_for_status()
-    except Exception as e:
-        Log.Critical(e.message)
-        return MessageContainer(L("error"), e.message)
-    return MessageContainer(L("success"), L("saved"))
-
-
-@route("%s/monitor/popup" % PREFIX, monitor_state=bool, season_nbr=int)
+@route("%s/monitor" % PREFIX, monitor_state=bool, season_nbr=int)
 def monitor(series_id, monitor_state, season_nbr=-1):
     oc = ObjectContainer()
     thumb = monitor_badge(monitor_state)
-    oc.add(DirectoryObject(key=Callback(monitor_toggle, series_id=series_id, monitor_state=monitor_state,
+    oc.add(DirectoryObject(key=Callback(monitor_set, series_id=series_id, monitor_state=monitor_state,
                                         season_nbr=season_nbr), title="Set Monitoring: %s" % monitor_state,
                            summary=str(L("monitorConfirm")) % monitor_state, thumb=thumb))
     return oc
 
 
-@route("%s/monitor/toggle" % PREFIX, monitor_state=bool, season_nbr=int)
-def monitor_toggle(series_id, monitor_state, season_nbr):
+@route("%s/monitor/set" % PREFIX, monitor_state=bool, season_nbr=int)
+def monitor_set(series_id, monitor_state, season_nbr):
     url = Dict["apiUrl"] + "series/%s" % series_id
     Log.Debug("Season: %d" % season_nbr)
     try:
@@ -329,9 +246,9 @@ def monitor_toggle(series_id, monitor_state, season_nbr):
     return MessageContainer(L("success"), str(L("monitorSet")) % monitor_state)
 
 
-@route("%s/series/seasons" % PREFIX)
-def seasons(series_id):
-    url = Dict["apiUrl"] + "series/%s" % series_id
+@route("%s/queue/list" % PREFIX)
+def queue():
+    url = Dict["apiUrl"] + "queue"
     try:
         with requests_cache.disabled():
             r = requests.get(url, headers=Dict["headers"])
@@ -339,35 +256,27 @@ def seasons(series_id):
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
-    title = r.json()["title"]
-    oc = ObjectContainer(title2=title)
-    for season in reversed(r.json()["seasons"]):
-        thumb = monitor_badge(season["monitored"])
-        season_nbr = season["seasonNumber"]
-        season_str = str(L("season")) % season_nbr
-        oc.add(DirectoryObject(key=Callback(seasons_options, series_id=series_id, season_id=season_nbr,
-                                            monitored=season["monitored"]), title=season_str, summary=season_str,
-                               thumb=thumb))
+    oc = ObjectContainer(title2=L("queue"))
+    for e in r.json():
+        status = e["status"]
+        title = e["title"]
+        series_title = e["series"]["title"]
+        summary = "Status: {}  Title: {}".format(status, title)
+        season_nbr = e["episode"]["seasonNumber"]
+        episode_nbr = e["episode"]["episodeNumber"]
+        episode_id = e["episode"]["id"]
+        header = "%s - %dX%02d" % (series_title, season_nbr, episode_nbr)
+        do = DirectoryObject(key=Callback(episode_options, episode_id=episode_id), title=header, summary=summary)
+        for coverType in e["series"]["images"]:
+            if coverType["coverType"] == "poster":
+                do.thumb = Callback(get_thumb, url=coverType["url"])
+                break
+        oc.add(do)
     return oc
 
 
-@route("%s/series/seasons/options" % PREFIX, monitored=bool)
-def seasons_options(series_id, season_id, monitored):
-    oc = ObjectContainer(title2=str(L("season")) % season_id)
-    thumb = monitor_badge(monitored)
-    oc.add(DirectoryObject(key=Callback(episodes, series_id=series_id, season_id=season_id), title=L("listEpisodes"),
-                           thumb=R("th-list.png")))
-    oc.add(DirectoryObject(key=Callback(monitor, series_id=series_id, monitor_state=(not monitored),
-                                        season_nbr=int(season_id)), title=L("toggleMonitor"), thumb=thumb))
-    oc.add(DirectoryObject(key=Callback(command_search, series_id=int(series_id), season_id=int(season_id)),
-                           title=L("seasonSearch"), thumb=R("search.png")))
-    oc.add(DirectoryObject(key=Callback(delete_season_popup, series_id=series_id, season_id=season_id),
-                           title=L("deleteSeason"), thumb=R("trash-o.png")))
-    return oc
-
-
-@route("%s/command/search" % PREFIX, series_id=int, season_id=int, episode_id=int)
-def command_search(series_id=-1, season_id=-1, episode_id=-1):
+@route("%s/search" % PREFIX, series_id=int, season_id=int, episode_id=int)
+def search(series_id=-1, season_id=-1, episode_id=-1):
     url = Dict["apiUrl"] + "command"
     try:
         if not episode_id == -1:
@@ -389,26 +298,18 @@ def command_search(series_id=-1, season_id=-1, episode_id=-1):
     return MessageContainer(L("success"), L("search"))
 
 
-@route("%s/delete/season/popup" % PREFIX)
-def delete_season_popup(series_id, season_id):
-    oc = ObjectContainer(title2=str(L("season")) % season_id)
-    oc.add(DirectoryObject(key=Callback(delete_season, series_id=series_id, season_id=season_id),
-                           title=L("confirmDelete"), summary=L("fileWarn"), thumb=R("exclamation-triangle.png")))
-    return oc
-
-
-@route("%s/delete/season/execute" % PREFIX)
-def delete_season(series_id, season_id):
+@route("%s/season/delete" % PREFIX)
+def season_delete(series_id, season_id):
     url = Dict["apiUrl"] + "episodefile"
     season_nbr = int(season_id)
     try:
         with requests_cache.disabled():
             r = requests.get(url, params={"seriesId": int(series_id)}, headers=Dict["headers"])
             r.raise_for_status()
-            for episode in r.json():
-                if episode["seasonNumber"] == season_nbr:
-                    Log.Info("Deleting: %d" % episode["id"])
-                    r = requests.delete(url + "/%s" % episode["id"], headers=Dict["headers"])
+            for e in r.json():
+                if e["seasonNumber"] == season_nbr:
+                    Log.Info("Deleting: %d" % e["id"])
+                    r = requests.delete(url + "/%s" % e["id"], headers=Dict["headers"])
                     r.raise_for_status()
             url = Dict["apiUrl"] + "series/%s" % series_id
             r = requests.get(url, headers=Dict["headers"])
@@ -428,88 +329,220 @@ def delete_season(series_id, season_id):
     return MessageContainer(L("success"), L("deleted"))
 
 
-@route("%s/episodes" % PREFIX)
-def episodes(series_id, season_id):
-    url = Dict["apiUrl"] + "episode"
+@route("%s/season/delete/confirm" % PREFIX)
+def season_delete_confirm(series_id, season_id):
+    oc = ObjectContainer(title2=str(L("season")) % season_id)
+    oc.add(DirectoryObject(key=Callback(season_delete, series_id=series_id, season_id=season_id),
+                           title=L("confirmDelete"), summary=L("fileWarn"), thumb=R("exclamation-triangle.png")))
+    return oc
+
+
+@route("%s/season/list" % PREFIX)
+def seasons(series_id):
+    url = Dict["apiUrl"] + "series/%s" % series_id
     try:
         with requests_cache.disabled():
-            r = requests.get(url, params={"seriesId": series_id}, headers=Dict["headers"])
+            r = requests.get(url, headers=Dict["headers"])
             r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
-    request = r.json()
-    series_title = request[0]["series"]["title"]
-    oc = ObjectContainer(title2=series_title)
-    for episode in reversed(request):
-        season_nbr = str(episode["seasonNumber"])
-        if not season_nbr == season_id:
-            continue
-        thumb = monitor_badge(episode["monitored"])
-        episode_nbr = episode["episodeNumber"]
-        title = "%d - %s" % (episode_nbr, episode["title"])
-        if episode["hasFile"]:
-            title = "[X] " + title
-        else:
-            title = "[ ] " + title
-        overview = episode.get("overview", L("noInfo"))
-        summary = str(L("downloaded")) % (episode["hasFile"], overview)
-        episode_id = episode["id"]
-        oc.add(DirectoryObject(key=Callback(episode_options, episode_id=episode_id), title=title, summary=summary,
+    title = r.json()["title"]
+    oc = ObjectContainer(title2=title)
+    for season in reversed(r.json()["seasons"]):
+        thumb = monitor_badge(season["monitored"])
+        season_nbr = season["seasonNumber"]
+        season_str = str(L("season")) % season_nbr
+        oc.add(DirectoryObject(key=Callback(season_options, series_id=series_id, season_id=season_nbr,
+                                            monitored=season["monitored"]), title=season_str, summary=season_str,
                                thumb=thumb))
     return oc
 
 
-@route("%s/episodes/options" % PREFIX)
-def episode_options(episode_id):
-    url = Dict["apiUrl"] + "episode/%s" % episode_id
-    try:
-        with requests_cache.disabled():
-            r = requests.get(url, headers=Dict["headers"])
-            r.raise_for_status()
-    except Exception as e:
-        Log.Critical(e.message)
-        return MessageContainer(L("error"), e.message)
-    episode = r.json()
-    title = episode["title"]
-    episode_id = episode["id"]
-    monitored = episode["monitored"]
+@route("%s/season/options" % PREFIX, monitored=bool)
+def season_options(series_id, season_id, monitored):
+    oc = ObjectContainer(title2=str(L("season")) % season_id)
     thumb = monitor_badge(monitored)
-    oc = ObjectContainer(title2=title)
-    oc.add(DirectoryObject(key=Callback(episode_monitor_popup, episode_id=episode_id, monitor_state=(not monitored)),
-                           title=L("toggleMonitor"), thumb=thumb))
-    oc.add(DirectoryObject(key=Callback(command_search, episode_id=int(episode_id)), title=L("episodeSearch"),
-                           summary=L("episodeSearchInfo"), thumb=R("search.png")))
+    oc.add(DirectoryObject(key=Callback(episode, series_id=series_id, season_id=season_id), title=L("listEpisodes"),
+                           thumb=R("th-list.png")))
+    oc.add(DirectoryObject(key=Callback(monitor, series_id=series_id, monitor_state=(not monitored),
+                                        season_nbr=int(season_id)), title=L("toggleMonitor"), thumb=thumb))
+    oc.add(DirectoryObject(key=Callback(search, series_id=int(series_id), season_id=int(season_id)),
+                           title=L("seasonSearch"), thumb=R("search.png")))
+    oc.add(DirectoryObject(key=Callback(season_delete, series_id=series_id, season_id=season_id),
+                           title=L("deleteSeason"), thumb=R("trash-o.png")))
     return oc
 
 
-@route("%s/episodes/monitor/popup" % PREFIX, episode_id=int, monitor_state=bool)
-def episode_monitor_popup(episode_id, monitor_state):
-    oc = ObjectContainer()
-    thumb = monitor_badge(monitor_state)
-    oc.add(DirectoryObject(key=Callback(episode_monitor_toggle, episode_id=episode_id, monitor_state=monitor_state),
-                           title="Set Monitoring: %s" % monitor_state,
-                           summary=str(L("monitorConfirm")) % monitor_state, thumb=thumb))
-    return oc
-
-
-@route("%s/episodes/monitor/toggle" % PREFIX, episode_id=int, monitor_state=bool)
-def episode_monitor_toggle(episode_id, monitor_state):
-    url = Dict["apiUrl"] + "episode/%s" % episode_id
-    Log.Debug("Episode: %d" % episode_id)
+@route("%s/series/add" % PREFIX, series_payload=dict)
+def series_add(series_payload):
+    url = Dict["apiUrl"] + "series"
     try:
         with requests_cache.disabled():
-            r = requests.get(url, headers=Dict["headers"])
-            r.raise_for_status()
-            url = Dict["apiUrl"] + "episode"
-            puts = r.json()
-            puts["monitored"] = monitor_state
-            r = requests.put(url, json=puts, headers=Dict["headers"])
+            r = requests.post(url, json=series_payload, headers=Dict["headers"])
             r.raise_for_status()
     except Exception as e:
         Log.Critical(e.message)
         return MessageContainer(L("error"), e.message)
-    return MessageContainer(L("success"), str(L("monitorSet")) % monitor_state)
+    return MessageContainer(L("success"), L("addSeriesInfo"))
+
+
+@route("%s/series/delete" % PREFIX)
+def series_delete(entity_id):
+    url = Dict["apiUrl"] + "series/%s" % entity_id
+    try:
+        with requests_cache.disabled():
+            r = requests.delete(url, params={"deleteFiles": True}, headers=Dict["headers"])
+            r.raise_for_status()
+    except Exception as e:
+        Log.Critical(e.message)
+        return MessageContainer(L("error"), e.message)
+    return MessageContainer(L("success"), L("deleted"))
+
+
+@route("%s/series/delete/confirm" % PREFIX)
+def series_delete_confirm(entity_id, title2):
+    oc = ObjectContainer(title2=title2)
+    oc.add(DirectoryObject(key=Callback(series_delete, entity_id=entity_id), title=L("confirmDelete"),
+                           summary=L("fileWarn"), thumb=R("exclamation-triangle.png")))
+    return oc
+
+
+@route("%s/series/list" % PREFIX)
+def series():
+    url = Dict["apiUrl"] + "series"
+    try:
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
+    except Exception as e:
+        Log.Critical(e.message)
+        return MessageContainer(L("error"), e.message)
+    oc = ObjectContainer(title2="Series")
+    oc.add(InputDirectoryObject(key=Callback(series_lookup), title=L("addSeries"), thumb=R("search.png"),
+                                prompt=L("seriesSearch")))
+    for s in sorted(r.json(), key=lambda x: x["sortTitle"]):
+        title = s["title"]
+        series_id = s["id"]
+        season_count = s["seasonCount"]
+        status = s["status"]
+        network = s.get("network", L("unknown"))
+        monitored = s["monitored"]
+        summary = "{}: {}  {}: {}  {}: {}  {}: {}".format(L("status"), status, L("network"), network, L("monitored"),
+                                                          monitored, L("seasons"), season_count)
+        do = DirectoryObject(key=Callback(series_options, series_id=series_id, title2=title), title=title,
+                             summary=summary)
+        for coverType in s["images"]:
+            if coverType["coverType"] == "poster":
+                do.thumb = Callback(get_thumb, url=Dict["host"] + coverType["url"])
+                break
+        oc.add(do)
+    return oc
+
+
+@route("%s/series/lookup" % PREFIX)
+def series_lookup(query):
+    url = Dict["apiUrl"] + "series/lookup"
+    try:
+        with requests_cache.disabled():
+            r = requests.get(url, params={"term": query}, headers=Dict["headers"])
+            r.raise_for_status()
+    except Exception as e:
+        Log.Critical(e.message)
+        return MessageContainer(L("error"), e.message)
+    oc = ObjectContainer(title2="Results")
+    # Default to first found profile
+    with requests_cache.disabled():
+        profile = requests.get(Dict["apiUrl"] + "qualityprofile", headers=Dict["headers"]).json()[0]["id"]
+        root_folder_path = requests.get(Dict["apiUrl"] + "rootfolder", headers=Dict["headers"]).json()[0]["path"]
+    for s in r.json():
+        tvdb_id = s["tvdbId"]
+        title = s["title"]
+        title_slug = s["titleSlug"]
+        nbr_seasons = s["seasons"]
+        # Default to use season folder.
+        season_folder = True
+        new_series = {"tvdbId": tvdb_id, "title": title, "profileId": profile, "titleSlug": title_slug,
+                      "seasons": nbr_seasons, "seasonFolder": season_folder, "rootFolderPath": root_folder_path}
+        network = s.get("network", L("unknown"))
+        overview = s.get("overview", L("noInfo"))
+        do = DirectoryObject(key=Callback(series_add, series=new_series), title=title,
+                             summary="Network: %s Description: %s" % (network, overview))
+        if "remotePoster" in s:
+            do.thumb = Callback(get_thumb, url=s["remotePoster"])
+        oc.add(do)
+    return oc
+
+
+@route("%s/series/options" % PREFIX)
+def series_options(series_id, title2):
+    url = Dict["apiUrl"] + "series/%s" % series_id
+    try:
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
+    except Exception as e:
+        Log.Critical(e.message)
+        return MessageContainer(L("error"), e.message)
+    monitored = r.json()["monitored"]
+    thumb = monitor_badge(monitored)
+    oc = ObjectContainer(title2=title2)
+    oc.add(DirectoryObject(key=Callback(seasons, series_id=series_id), title=L("listSeasons"), thumb=R("th-list.png")))
+    oc.add(PopupDirectoryObject(key=Callback(monitor, series_id=series_id, monitor_state=(not monitored)),
+                                title=L("toggleMonitor"), summary="%s: %s" % (L("monitored"), monitored), thumb=thumb))
+    oc.add(DirectoryObject(key=Callback(series_profile, series_id=series_id), title=L("changeQuality"),
+                           thumb=R("wrench.png")))
+    oc.add(DirectoryObject(key=Callback(search, series_id=int(series_id)), title=L("seriesSearch"),
+                           thumb=R("search.png")))
+    oc.add(DirectoryObject(key=Callback(series_delete_confirm, entity_id=series_id, title2=title2),
+                           title=L("deleteSeries"), thumb=R("trash-o.png")))
+    return oc
+
+
+@route("%s/series/profile" % PREFIX)
+def series_profile(series_id):
+    url = Dict["apiUrl"] + "series/%s" % series_id
+    try:
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
+            s = r.json()
+            url = Dict["apiUrl"] + "qualityprofile"
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
+    except Exception as e:
+        Log.Critical(e.message)
+        return MessageContainer(L("error"), e.message)
+    oc = ObjectContainer(title2=L("quality"))
+    for profile in r.json():
+        title = profile["name"]
+        quality_id = profile["id"]
+        if quality_id == s["profileId"]:
+            title += L("current")
+            thumb = R("square.png")
+        else:
+            thumb = R("circle-o.png")
+        oc.add(DirectoryObject(key=Callback(series_profile_set, series_id=series_id, quality_id=quality_id),
+                               title=title, summary="%s: %s" % (L("cutOff"), profile["cutoff"]["name"]), thumb=thumb))
+    return oc
+
+
+@route("%s/series/profile/set" % PREFIX, quality_id=int)
+def series_profile_set(series_id, quality_id):
+    url = Dict["apiUrl"] + "series/%s" % series_id
+    try:
+        with requests_cache.disabled():
+            r = requests.get(url, headers=Dict["headers"])
+            r.raise_for_status()
+            s = r.json()
+            s["profileId"] = quality_id
+            url = Dict["apiUrl"] + "series"
+            r = requests.put(url, json=s, headers=Dict["headers"])
+            r.raise_for_status()
+    except Exception as e:
+        Log.Critical(e.message)
+        return MessageContainer(L("error"), e.message)
+    return MessageContainer(L("success"), L("saved"))
 
 
 @route("%s/thumb" % PREFIX)
@@ -525,6 +558,41 @@ def get_thumb(url, content_type="image/jpeg", timeout=10, use_cache=True):
         Log.Critical(e.message)
         return DataObject(Resource.Load("question-circle.png", binary=True), "image/png")
     return DataObject(data.content, content_type)
+
+
+@route("%s/wanted/list" % PREFIX, page=int, page_size=int)
+def wanted(page=1, page_size=19):
+    oc = ObjectContainer(title2="Wanted")
+
+    url = Dict["apiUrl"] + "missing"
+    try:
+        with requests_cache.disabled():
+            r = requests.get(url,
+                             params={"page": page, "pageSize": page_size, "sortKey": "date", "sortDir": "desc"},
+                             headers=Dict["headers"], verify=False)
+            r.raise_for_status()
+    except Exception as e:
+        Log.Critical(e.message)
+        return MessageContainer(L("error"), e.message)
+
+    for record in r.json()["records"]:
+        season_nbr = record["seasonNumber"]
+        episode_nbr = record["episodeNumber"]
+        series_title = record["series"]["title"]
+        date = Datetime.ParseDate(record["airDateUtc"])
+        episode_id = record["id"]
+        title = "%s - %dX%02d - %s" % (series_title, season_nbr, episode_nbr, pretty_datetime(date))
+        episode_title = record["title"]
+        summary = "%s" % episode_title
+        do = DirectoryObject(key=Callback(episode_options, episode_id=episode_id), title=title, summary=summary)
+        for coverType in record["series"]["images"]:
+            if coverType["coverType"] == "poster":
+                do.thumb = Callback(get_thumb, url=coverType["url"])
+                break
+        oc.add(do)
+    if page * page_size < r.json()["totalRecords"]:
+        oc.add(NextPageObject(key=Callback(wanted, page=page + 1)))
+    return oc
 
 
 def pretty_datetime(d):
@@ -567,71 +635,3 @@ def monitor_badge(is_monitored):
 def timestamp(time=datetime.utcnow()):
     """ Convert a datetime to ISO-8601 formatted in UTC to send to Sonarr """
     return str(time.isoformat("T")).split(".")[0] + "Z"
-
-
-@route("%s/calendar" % PREFIX)
-def calendar():
-    start = timestamp(datetime.utcnow() - Datetime.Delta(hours=6))
-    end = timestamp(datetime.utcnow() + Datetime.Delta(weeks=1))
-
-    url = Dict["apiUrl"] + "calendar"
-    try:
-        with requests_cache.disabled():
-            r = requests.get(url, params={"start": start, "end": end}, headers=Dict["headers"])
-            r.raise_for_status()
-    except Exception as e:
-        Log.Critical(e.message)
-        return MessageContainer(L("error"), e.message)
-
-    oc = ObjectContainer(title2=L("calendar"))
-    for episode in r.json():
-        season_nbr = episode["seasonNumber"]
-        episode_nbr = episode["episodeNumber"]
-        episode_id = episode["id"]
-        dt = Datetime.ParseDate(episode["airDateUtc"])
-        episode_title = episode["title"]
-        episode_overview = episode.get("overview", L("noInfo"))
-        title = "%s - %dX%02d - %s" % (episode_title, season_nbr, episode_nbr, pretty_datetime(dt))
-        do = DirectoryObject(key=Callback(episode_options, episode_id=episode_id), title=title,
-                             summary=episode_overview)
-        for coverType in episode["series"]["images"]:
-            if coverType["coverType"] == "poster":
-                do.thumb = Callback(get_thumb, url=coverType["url"])
-                break
-        oc.add(do)
-    return oc
-
-
-@route("%s/wanted" % PREFIX, page=int, page_size=int)
-def wanted(page=1, page_size=19):
-    oc = ObjectContainer(title2="Wanted")
-
-    url = Dict["apiUrl"] + "missing"
-    try:
-        with requests_cache.disabled():
-            r = requests.get(url,
-                             params={"page": page, "pageSize": page_size, "sortKey": "airDateUtc", "sortDir": "desc"},
-                             headers=Dict["headers"], verify=False)
-            r.raise_for_status()
-    except Exception as e:
-        Log.Critical(e.message)
-        return MessageContainer(L("error"), e.message)
-
-    for record in r.json()["records"]:
-        season_nbr = record["seasonNumber"]
-        episode_nbr = record["episodeNumber"]
-        series_title = record["series"]["title"]
-        date = Datetime.ParseDate(record["airDateUtc"])
-        episode_id = record["id"]
-        title = "%s - %dX%02d - %s" % (series_title, season_nbr, episode_nbr, pretty_datetime(date))
-        episode_title = record["title"]
-        summary = "%s" % episode_title
-        do = DirectoryObject(key=Callback(episode_options, episode_id=episode_id), title=title, summary=summary)
-        for coverType in record["series"]["images"]:
-            if coverType["coverType"] == "poster":
-                do.thumb = Callback(get_thumb, url=coverType["url"])
-                break
-        oc.add(do)
-    if page * page_size < r.json()["totalRecords"]:
-        oc.add(NextPageObject(key=Callback(wanted, page=page + 1)))
-    return oc

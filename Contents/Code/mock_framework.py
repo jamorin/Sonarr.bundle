@@ -122,9 +122,9 @@ class Datetime(object):
         return Datetime
 
 
-class HTTP(object):
+class Resource(object):
     @staticmethod
-    def Request(*args, **kwargs):
+    def Load(*args, **kwargs):
         return ""
 
 
