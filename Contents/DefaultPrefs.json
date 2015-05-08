@@ -18,14 +18,41 @@
     "default": ""
   },
   {
+    "id": "https",
+    "label": "Enable SSL",
+    "type": "bool",
+    "default": "false"
+  },
+  {
     "id": "apiKey",
-    "label": "API Key",
+    "label": "API Key (Required)",
     "type": "text",
     "default": ""
   },
   {
+    "id": "username",
+    "label": "Username",
+    "type": "text",
+    "default": ""
+  },
+  {
+    "id": "password",
+    "label": "Password",
+    "type": "text",
+    "option": "hidden",
+    "default": "",
+    "secure": "true"
+  },
+  {
+    "id": "auth",
+    "label": "Authentication",
+    "type": "enum",
+    "values": ["basic", "digest"],
+    "default": "basic"
+  },
+  {
     "id": "season_folder",
-    "label": "Use Season Folder",
+    "label": "Use season folders (when adding series)",
     "type": "bool",
     "default": "true"
   },
