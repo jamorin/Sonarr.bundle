@@ -47,8 +47,8 @@
     "id": "auth",
     "label": "Authentication",
     "type": "enum",
-    "values": ["basic", "digest"],
-    "default": "basic"
+    "values": ["None", "Basic", "Digest"],
+    "default": "None"
   },
   {
     "id": "season_folder",
@@ -58,7 +58,7 @@
   },
   {
     "id": "delete_files",
-    "label": "Delete all files from disk (when removing series)",
+    "label": "Delete files permanently from disk when removing episodes",
     "type": "bool",
     "default": "false"
   }
