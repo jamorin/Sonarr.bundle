@@ -1,6 +1,6 @@
 from datetime import datetime
 
-Prefs = {
+L = {
     "series": "Series",
     "seriesInfo": "View all series or add to your collection",
     "addSeries": "Add series to collection",
@@ -58,11 +58,15 @@ Prefs = {
     "hourago": "1 hour ago",
     "hoursago": " hours ago"
 }
-Dict = {
+Prefs = {
     "ip": "192.168.1.14",
     "port": "8989",
     "base": "/sonarr",
-    "apiKey": "12345"
+    "https": False,
+    "apiKey": "12345",
+    "username": "user",
+    "password": "pass",
+    "auth": "basic"
 }
 
 def R(res):
