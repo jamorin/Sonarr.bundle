@@ -15,7 +15,7 @@
     "id": "base",
     "label":  "URL Base (ex. /sonarr)",
     "type": "text",
-    "default": ""
+    "default": "/"
   },
   {
     "id": "https",
@@ -31,13 +31,13 @@
   },
   {
     "id": "username",
-    "label": "Username",
+    "label": "Username (if authentication enabled below)",
     "type": "text",
     "default": ""
   },
   {
     "id": "password",
-    "label": "Password",
+    "label": "Password (if authentication enabled below)",
     "type": "text",
     "option": "hidden",
     "default": "",
