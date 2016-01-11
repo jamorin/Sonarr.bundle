@@ -281,7 +281,7 @@ def search(series_id=-1, season_id=-1, episode_id=-1):
     try:
         if not episode_id == -1:
             Log.Info("Episode Search:%d" % episode_id)
-            params = {"name": "EpisodeSearch", "episode_ids": [episode_id]}
+            params = {"name": "EpisodeSearch", "episodeIds": [episode_id]}
         elif season_id == -1:
             Log.Info("Series Search:%d" % series_id)
             params = {"name": "SeriesSearch", "seriesId": int(series_id)}
