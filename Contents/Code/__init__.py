@@ -94,8 +94,8 @@ def episode(series_id, season_id):
         Log.Critical(e.message)
         return MessageContainer(S("error"), e.message)
     request = r.json()
-    series_title = request[0]["series"]["title"]
-    oc = ObjectContainer(title2=series_title)
+    current_season = "Season " + season_id
+    oc = ObjectContainer(title2=current_season)
     # for e in reversed(request):
     # for e in reversed(request):
     for e in sorted(request, key=lambda x: x["episodeNumber"], reverse=True):
