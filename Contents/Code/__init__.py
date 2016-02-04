@@ -426,7 +426,7 @@ def series():
                              summary=summary)
         for coverType in s["images"]:
             if coverType["coverType"] == "poster":
-                do.thumb = Callback(get_thumb, url=endpoint + coverType["url"])
+                do.thumb = Callback(get_thumb, url=apiUrl + coverType["url"] + "&apikey=" + Prefs["apiKey"])
                 break
         oc.add(do)
     return oc
