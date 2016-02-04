@@ -6,7 +6,7 @@ A plugin for [Plex Media Server](https://plex.tv/) to control [Sonarr](https://s
 
 ## Supports:
 - View your TV shows, calendar (current week), queue, missing episodes, and history
-- Add new series to your collection
+- Add new series to your collection (Currently not possible as the newest plex clients hide this field after the massive redesign)
 - Search, delete, and update existing shows, seasons, or episodes.
 
 ## Install
