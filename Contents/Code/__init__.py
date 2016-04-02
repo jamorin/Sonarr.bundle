@@ -1,5 +1,6 @@
 # from mock_framework import *
 from datetime import datetime
+from DumbTools import DumbKeyboard
 import requests
 
 PREFIX = "/video/sonarr"
@@ -414,8 +415,11 @@ def series():
         Log.Critical(e.message)
         return MessageContainer(S("error"), e.message)
     oc = ObjectContainer(title2="Series")
-    oc.add(InputDirectoryObject(key=Callback(series_lookup), title=S("addSeries"), summary=S("addSeriesSummary"),
-                                thumb=R("search.png"), prompt=S("search")))
+    if Client.Product in DumbKeyboard.clients:
+        DumbKeyboard(PREFIX, oc, series_lookup, dktitle=S("addSeries"), dkthumb=R("search.png"))
+    else:
+        oc.add(InputDirectoryObject(key=Callback(series_lookup), title=S("addSeries"), summary=S("addSeriesSummary"),
+                                    thumb=R("search.png"), prompt=S("search")))
     for s in sorted(r.json(), key=lambda x: x["sortTitle"]):
         title = s["title"]
         series_id = s["id"]
