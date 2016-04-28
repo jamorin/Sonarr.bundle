@@ -1,54 +1,29 @@
 [
   {
-    "id": "ip",
-    "label": "Address",
+    "id": "url",
+    "label": "Endpoint (with URL Base)",
     "type": "text",
-    "default": "localhost"
-  },
-  {
-    "id": "port",
-    "label": "Port Number",
-    "type": "text",
-    "default": "8989"
-  },
-  {
-    "id": "base",
-    "label":  "URL Base (ex. /sonarr)",
-    "type": "text",
-    "default": "/"
-  },
-  {
-    "id": "https",
-    "label": "Enable SSL",
-    "type": "bool",
-    "default": "false"
+    "default": "http://localhost:8989"
   },
   {
     "id": "apiKey",
     "label": "API Key (Required)",
     "type": "text",
-    "default": ""
+    "default": "",
+    "secure": "true"
   },
   {
     "id": "username",
-    "label": "Username (if authentication enabled below)",
+    "label": "Username (for Reverse Proxies)",
     "type": "text",
     "default": ""
   },
   {
     "id": "password",
-    "label": "Password (if authentication enabled below)",
+    "label": "Password",
     "type": "text",
-    "option": "hidden",
     "default": "",
     "secure": "true"
-  },
-  {
-    "id": "auth",
-    "label": "Authentication",
-    "type": "enum",
-    "values": ["None", "Basic", "Digest"],
-    "default": "None"
   },
   {
     "id": "season_folder",
@@ -60,6 +35,6 @@
     "id": "delete_files",
     "label": "Delete files permanently from disk when removing episodes",
     "type": "bool",
-    "default": "false"
+    "default": "true"
   }
 ]
