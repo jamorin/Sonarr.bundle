@@ -2,6 +2,9 @@ import requests
 import re
 from datetime import datetime
 from DumbTools import DumbKeyboard, DumbPrefs
+# import platform
+# if platform.system() == 'Darwin':
+#     from mock_framework import *
 
 PREFIX = '/video/sonarr'
 NAME = 'Sonarr'
