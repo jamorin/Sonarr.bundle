@@ -156,50 +156,34 @@ def episode_delete(entity_id, title2):
 
 
 @route(PREFIX + '/episode/history', episode_id=int)
-def episode_history(episode_id, page=1, page_size=5):
+def episode_history(episode_id, page=1, page_size=10):
+    return history_get(episode_history, page, page_size, episode_id=episode_id)
+
+
+@route(PREFIX + '/release', episode_id=int)
+def release(episode_id):
     try:
-        records = get('/history', params={'episodeId': episode_id,
-                                          'page': page,
-                                          'pageSize': page_size,
-                                          'sortKey': 'date',
-                                          'sortDir': 'desc'})
-        oc = ObjectContainer(title2=L('history'))
-        delta = utc_delta()
-        for record in records['records']:
-            season_nbr = record['episode']['seasonNumber']
-            episode_nbr = record['episode']['episodeNumber']
-            series_title = record['series']['title']
-            episode_title = record['episode']['title']
-            episode_quality = record['quality']['quality']['name']
-            event = record['eventType']
-            episode_id = record['episodeId']
-            if event == 'downloadFolderImported':
-                summary = L('imported')
-                thumb = R('download.png')
-            elif event == 'downloadFailed':
-                summary = L('failed')
-                thumb = R('exclamation-triangle.png')
-            elif event == 'grabbed':
-                summary = L('grabbed')
-                thumb = R('cloud-download.png')
-            elif event == 'episodeFileDeleted':
-                summary = L('deleted')
-                thumb = R('trash-o.png')
-            else:
-                summary = event
-                thumb = R('question-circle.png')
-            title = '%s - %dX%02d - %s' % (series_title,
-                                           season_nbr,
-                                           episode_nbr,
-                                           pretty_datetime(record['date'],
-                                                           delta))
-            summary = '%s: %s  %s: %s' % (summary, episode_title, L('quality'), episode_quality)
-            oc.add(DirectoryObject(key=Callback(episode, episode_id=episode_id),
+        Log.Info(episode_id)
+        response = get('/release', params={'episodeId': episode_id, 'sort_by': 'releaseWeight', 'order': 'asc'})
+        oc = ObjectContainer(title2=L('release'))
+        for curr_release in response:
+            age = curr_release['age']
+            indexer = curr_release['indexer']
+            quality = curr_release['quality']['quality']['name']
+            title = u'%s: %s %s %s %s' % (L('age'), age, curr_release['title'], indexer, quality)
+            oc.add(DirectoryObject(key=Callback(release_put, new_release=curr_release),
                                    title=title,
-                                   summary=summary,
-                                   thumb=thumb))
-        if page * page_size < records['totalRecords']:
-            oc.add(NextPageObject(key=Callback(episode_history, episode_id=episode_id, page=page + 1)))
+                                   thumb=R('download.png')))
+        return oc
+    except Exception as e:
+        return error_message(e)
+
+
+@route(PREFIX + '/release/put', new_release=dict)
+def release_put(new_release):
+    try:
+        post('/release', json=new_release)
+        return success_message()
     except Exception as e:
         return error_message(e)
 
@@ -218,6 +202,9 @@ def episode(episode_id):
         oc.add(DirectoryObject(key=Callback(automatic_search, name='EpisodeSearch', param_1=episode_id),
                                title=L('automatic_search'),
                                thumb=R('search.png')))
+        oc.add(DirectoryObject(key=Callback(release, episode_id=episode_id),
+                               title=L('manual_search'),
+                               thumb=R('user.png')))
         oc.add(DirectoryObject(key=Callback(episode_history, episode_id=episode_id),
                                title=L('history'),
                                thumb=R('history.png')))
@@ -232,48 +219,7 @@ def episode(episode_id):
 
 @route(PREFIX + '/history', page=int, page_size=int)
 def history(page=1, page_size=19):
-    try:
-        records = get('/history', params={'page': page, 'pageSize': page_size, 'sortKey': 'date', 'sortDir': 'desc'})
-        oc = ObjectContainer(title2=L('history'))
-        delta = utc_delta()
-        for record in records['records']:
-            season_nbr = record['episode']['seasonNumber']
-            episode_nbr = record['episode']['episodeNumber']
-            series_title = record['series']['title']
-            episode_title = record['episode']['title']
-            episode_quality = record['quality']['quality']['name']
-            event = record['eventType']
-            episode_id = record['episodeId']
-            if event == 'downloadFolderImported':
-                summary = L('imported')
-                thumb = R('download.png')
-            elif event == 'downloadFailed':
-                summary = L('failed')
-                thumb = R('exclamation-triangle.png')
-            elif event == 'grabbed':
-                summary = L('grabbed')
-                thumb = R('cloud-download.png')
-            elif event == 'episodeFileDeleted':
-                summary = L('deleted')
-                thumb = R('trash-o.png')
-            else:
-                summary = event
-                thumb = R('question-circle.png')
-            title = '%s - %dX%02d - %s' % (series_title,
-                                           season_nbr,
-                                           episode_nbr,
-                                           pretty_datetime(record['date'],
-                                                           delta))
-            summary = '%s: %s  %s: %s' % (summary, episode_title, L('quality'), episode_quality)
-            oc.add(DirectoryObject(key=Callback(episode, episode_id=episode_id),
-                                   title=title,
-                                   summary=summary,
-                                   thumb=thumb))
-        if page * page_size < records['totalRecords']:
-            oc.add(NextPageObject(key=Callback(history, page=page + 1)))
-        return oc
-    except Exception as e:
-        return error_message(e)
+    return history_get(history, page, page_size)
 
 
 @route(PREFIX + '/series/monitor', series_id=int)
@@ -614,6 +560,54 @@ def wanted(oc, command, func, page=1, page_size=19):
             oc.add(do)
         if page * page_size < res['totalRecords']:
             oc.add(NextPageObject(key=Callback(func, page=page + 1)))
+        return oc
+    except Exception as e:
+        return error_message(e)
+
+
+def history_get(callback, page, page_size, sort_key='date', sort_dir='desc', episode_id=None):
+    try:
+        params = {'page': page, 'pageSize': page_size, 'sortKey': sort_key, 'sortDir': sort_dir}
+        if episode_id is not None:
+            params['episodeId'] = episode_id
+        records = get('/history', params=params)
+        oc = ObjectContainer(title2=L('history'))
+        delta = utc_delta()
+        for record in records['records']:
+            season_nbr = record['episode']['seasonNumber']
+            episode_nbr = record['episode']['episodeNumber']
+            series_title = record['series']['title']
+            episode_title = record['episode']['title']
+            episode_quality = record['quality']['quality']['name']
+            event = record['eventType']
+            episode_id = record['episodeId']
+            if event == 'downloadFolderImported':
+                summary = L('imported')
+                thumb = R('download.png')
+            elif event == 'downloadFailed':
+                summary = L('failed')
+                thumb = R('exclamation-triangle.png')
+            elif event == 'grabbed':
+                summary = L('grabbed')
+                thumb = R('cloud-download.png')
+            elif event == 'episodeFileDeleted':
+                summary = L('deleted')
+                thumb = R('trash-o.png')
+            else:
+                summary = event
+                thumb = R('question-circle.png')
+            title = '%s - %dX%02d - %s' % (series_title,
+                                           season_nbr,
+                                           episode_nbr,
+                                           pretty_datetime(record['date'],
+                                                           delta))
+            summary = '%s: %s  %s: %s' % (summary, episode_title, L('quality'), episode_quality)
+            oc.add(DirectoryObject(key=Callback(episode, episode_id=episode_id),
+                                   title=title,
+                                   summary=summary,
+                                   thumb=thumb))
+        if page * page_size < records['totalRecords']:
+            oc.add(NextPageObject(key=Callback(callback, page=page + 1)))
         return oc
     except Exception as e:
         return error_message(e)
