@@ -26,6 +26,7 @@ def Start():
 def ValidatePrefs():
     global ENDPOINT
     ENDPOINT = Prefs['url'].rstrip('/') + '/api'
+    Log.Info('Endpoint: %s' % ENDPOINT)
     HEADERS['X-Api-Key'] = Prefs['apiKey']
 
 
@@ -569,10 +570,8 @@ def get_thumb(url, external=False):
     # noinspection PyBroadException
     try:
         if external:
-            Log.Info('External: %s' % url)
             return Redirect(url)
         else:
-            Log.Info('Internal: %s' % url)
             response = get(url, accept='image/jpeg', content_type='')
             return DataObject(response.content, 'image/jpeg')
     except:
@@ -671,7 +670,7 @@ def get(command, params=None, accept='application/json', content_type='applicati
                'Accept': accept,
                'Content-Type': content_type
                }
-    Log.Info(ENDPOINT + command)
+    Log.Debug(ENDPOINT + command)
     response = requests.get(ENDPOINT + command, params=params, headers=headers, verify=False, timeout=120)
     response.raise_for_status()
     header = response.headers['Content-Type']
@@ -682,26 +681,20 @@ def get(command, params=None, accept='application/json', content_type='applicati
 
 
 def put(command, json=None):
-    response = requests.put(ENDPOINT + command, json=json, headers=HEADERS, verify=False, timeout=60)
+    response = requests.put(ENDPOINT + command, json=json, headers=HEADERS, verify=False, timeout=90)
     response.raise_for_status()
-    Log.Info(ENDPOINT + command)
-    Log.Info(str(json))
     return response.json()
 
 
 def post(command, json=None):
-    response = requests.post(ENDPOINT + command, json=json, headers=HEADERS, verify=False, timeout=60)
+    response = requests.post(ENDPOINT + command, json=json, headers=HEADERS, verify=False, timeout=90)
     response.raise_for_status()
-    Log.Info(ENDPOINT + command)
-    Log.Info(str(json))
     return response.json()
 
 
 def delete(command, json=None):
-    response = requests.delete(ENDPOINT + command, json=json, headers=HEADERS, verify=False, timeout=60)
+    response = requests.delete(ENDPOINT + command, json=json, headers=HEADERS, verify=False, timeout=90)
     response.raise_for_status()
-    Log.Info(ENDPOINT + command)
-    Log.Info(str(json))
     return response.json()
 
 
@@ -719,13 +712,9 @@ def getdefault(dictonary, key, default=L('unknown')):
 def cover_type(dictionary, do, external=True):
     for image in dictionary['images']:
         if image['coverType'] == 'poster':
-            Log.Info(image['url'])
+            Log.Debug(image['url'])
             poster = image['url']
-            # TODO remove cache workaround
             if not external:
                 poster = re.sub('.*/MediaCover', '/MediaCover', image['url'])
-                poster += '&nocache=%s' % Util.RandomInt(0, 30)
-            else:
-                poster += '?nocache=%s' % Util.RandomInt(0, 30)
             do.thumb = Callback(get_thumb, url=poster, external=external)
             break
