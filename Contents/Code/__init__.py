@@ -1,6 +1,5 @@
 import requests
 import re
-from datetime import datetime
 # import platform
 # if platform.system() == 'Darwin':
 #     from mock_framework import *
@@ -72,8 +71,8 @@ def main_menu():
 @route(PREFIX + '/calendar')
 def calendar():
     try:
-        start = timestamp(datetime.utcnow() - Datetime.Delta(hours=4))
-        end = timestamp(datetime.utcnow() + Datetime.Delta(weeks=1))
+        start = timestamp(Datetime.UTCNow() - Datetime.Delta(hours=4))
+        end = timestamp(Datetime.UTCNow() + Datetime.Delta(weeks=1))
         response = get('/calendar', params={'unmonitored': False, 'start': start, 'end': end})
         oc = ObjectContainer(title2=L('calendar'))
         delta = utc_delta()
@@ -104,6 +103,7 @@ def episodes(series_id, season_id):
         response = get('/episode', params={'seriesId': series_id})
         oc = ObjectContainer(title2='%s %d' % (L('season'), season_id))
         curr_season = filter(lambda x: x['seasonNumber'] == season_id, response)
+        delta = utc_delta()
         for curr_episode in reversed(curr_season):
             thumb = monitor_badge(curr_episode['monitored'])
             episode_nbr = curr_episode['episodeNumber']
@@ -111,6 +111,8 @@ def episodes(series_id, season_id):
             if curr_episode['hasFile']:
                 title += u'\u2713'
             title += u' %s' % curr_episode['title']
+            if 'airDateUtc' in curr_episode:
+                title += u' - %s' % pretty_datetime(curr_episode['airDateUtc'], delta)
             summary = getdefault(curr_episode, 'overview')
             episode_id = curr_episode['id']
             oc.add(DirectoryObject(key=Callback(episode, episode_id=episode_id),
@@ -316,7 +318,7 @@ def automatic_search(name, param_1, param_2=0):
 @route(PREFIX + '/seasons', series_id=int)
 def seasons(series_id):
     try:
-        r = get('/series/%d' % series_id, params={'sort_by': 'sortTitle', 'order': 'asc'})
+        r = get('/series/%d' % series_id)
         oc = ObjectContainer(title2=r['title'])
         for curr_season in reversed(r['seasons']):
             thumb = monitor_badge(curr_season['monitored'])
@@ -336,7 +338,7 @@ def seasons(series_id):
 @route(PREFIX + '/season', series_id=int, season_id=int)
 def season(series_id, season_id):
     oc = ObjectContainer(title2=u'%s %d' % (L('season'), season_id))
-    response = get('/series/%d' % series_id, params={'sort_by': 'sortTitle', 'order': 'asc'})
+    response = get('/series/%d' % series_id)
     curr_season = filter(lambda x: x['seasonNumber'] == season_id, response['seasons'])[0]
     # noinspection PyTypeChecker
     thumb = monitor_badge(curr_season['monitored'])
@@ -384,7 +386,7 @@ def series_delete(entity_id, title2):
 @route(PREFIX + '/series')
 def series():
     try:
-        response = get('/series', params={'sort_by': 'sortTitle', 'order': 'asc'})
+        response = get('/series')
         oc = ObjectContainer(title2=L('series'))
         if Client.Product in DumbKeyboard.clients:
             DumbKeyboard(PREFIX, oc, series_lookup, dktitle=L('add'), dkthumb=R('search.png'))
@@ -394,7 +396,7 @@ def series():
                 title=L('add'),
                 thumb=R('search.png'),
                 prompt=L('search')))
-        for curr_series in response:
+        for curr_series in sorted(response, key=lambda x: x['sortTitle']):
             title = curr_series['title']
             series_id = curr_series['id']
             summary = '{0}: {1}'.format(getdefault(curr_series, 'network'), curr_series['status'])
@@ -402,7 +404,7 @@ def series():
                     key=Callback(seriesid, series_id=series_id, title2=title),
                     title=title,
                     summary=summary)
-            cover_type(curr_series, do, external=False)
+            cover_type(curr_series, do)
             oc.add(do)
         return oc
     except Exception as e:
@@ -624,7 +626,9 @@ def pretty_datetime(d, delta):
     diff = now - dt
     # Future
     if dt > now:
-        if now.day == dt.day:
+        if diff.days < -7:
+            pretty = dt.strftime('%d %b %Y')
+        elif now.day == dt.day:
             pretty = u'%s %s' % (L('today'), dt.strftime('%I:%M%p'))
         elif (now + Datetime.Delta(days=1)).day == dt.day:
             pretty = u'%s %s' % (L('tomorrow'), dt.strftime('%I:%M%p'))
@@ -659,7 +663,7 @@ def error_message(exception):
     return MessageContainer(L('error'), exception.message)
 
 
-def timestamp(time=datetime.utcnow()):
+def timestamp(time=Datetime.UTCNow()):
     """ Convert a datetime to ISO-8601 formatted in UTC to send to Sonarr """
     return time.isoformat('T').split('.')[0] + 'Z'
 
@@ -699,7 +703,7 @@ def delete(command, json=None):
 
 def utc_delta():
     local = Datetime.Now().replace(minute=0, second=0, microsecond=0)
-    utc = datetime.utcnow().replace(minute=0, second=0, microsecond=0, tzinfo=None)
+    utc = Datetime.UTCNow().replace(minute=0, second=0, microsecond=0, tzinfo=None)
     delta = local - utc
     return delta
 
@@ -708,12 +712,14 @@ def getdefault(dictonary, key, default=L('unknown')):
     return dictonary[key] if key in dictonary else default
 
 
-def cover_type(dictionary, do, external=True):
+def cover_type(dictionary, do):
     for image in dictionary['images']:
         if image['coverType'] == 'poster':
             Log.Debug(image['url'])
             poster = image['url']
-            if not external:
+            if re.match('.*/MediaCover', poster):
                 poster = re.sub('.*/MediaCover', '/MediaCover', image['url'])
-            do.thumb = Callback(get_thumb, url=poster, external=external)
+                do.thumb = Callback(get_thumb, url=poster, external=False)
+            else:
+                do.thumb = Callback(get_thumb, url=poster, external=True)
             break
