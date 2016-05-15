@@ -1,12 +1,12 @@
 [
   {
     "id": "url",
-    "label": "Endpoint (with URL Base)",
+    "label": "Endpoint (Including URL base)",
     "type": "text",
-    "default": "http://localhost:8989"
+    "default": "http://127.0.0.1:8989"
   },
   {
-    "id": "apiKey",
+    "id": "api_key",
     "label": "API Key (Required)",
     "type": "text",
     "default": "",
@@ -14,7 +14,7 @@
   },
   {
     "id": "username",
-    "label": "Username (for Reverse Proxies)",
+    "label": "Username (Reverse proxy only)",
     "type": "text",
     "default": ""
   },
@@ -27,7 +27,7 @@
   },
   {
     "id": "season_folder",
-    "label": "Use season folders (when adding series)",
+    "label": "Use season folders when adding a new series",
     "type": "bool",
     "default": "true"
   },

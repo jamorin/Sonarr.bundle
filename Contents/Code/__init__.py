@@ -9,11 +9,12 @@ from DumbTools import DumbKeyboard, DumbPrefs
 PREFIX = '/video/sonarr'
 NAME = 'Sonarr'
 
-ENDPOINT = 'http://localhost:8989'
+ENDPOINT = 'http://127.0.0.1:8989'
 HEADERS = {'X-Api-Key': None,
            'Accept': 'application/json',
            'Content-Type': 'application/json'
            }
+BASIC = None
 
 
 # noinspection PyPep8Naming
@@ -27,10 +28,14 @@ def Start():
 
 # noinspection PyPep8Naming
 def ValidatePrefs():
-    global ENDPOINT
+    global ENDPOINT, BASIC
     ENDPOINT = Prefs['url'].rstrip('/') + '/api'
+    BASIC = None
     Log.Info('Endpoint: %s' % ENDPOINT)
-    HEADERS['X-Api-Key'] = Prefs['apiKey']
+    HEADERS['X-Api-Key'] = Prefs['api_key']
+    if Prefs['username'] and Prefs['password']:
+        Log.Info('Using basic auth')
+        BASIC = (Prefs['username'], Prefs['password'])
 
 
 @handler(PREFIX, NAME, thumb='1024.png', art='logo.png')
@@ -663,12 +668,12 @@ def timestamp(time=datetime.utcnow()):
 
 
 def get(command, params=None, accept='application/json', content_type='application/json'):
-    headers = {'X-Api-Key': Prefs['apiKey'],
+    headers = {'X-Api-Key': Prefs['api_key'],
                'Accept': accept,
                'Content-Type': content_type
                }
     Log.Debug(ENDPOINT + command)
-    response = requests.get(ENDPOINT + command, params=params, headers=headers, verify=False, timeout=120)
+    response = requests.get(ENDPOINT + command, params=params, headers=headers, auth=BASIC, verify=False, timeout=120)
     response.raise_for_status()
     header = response.headers['Content-Type']
     if not header.startswith(accept):
@@ -678,19 +683,19 @@ def get(command, params=None, accept='application/json', content_type='applicati
 
 
 def put(command, json=None):
-    response = requests.put(ENDPOINT + command, json=json, headers=HEADERS, verify=False, timeout=90)
+    response = requests.put(ENDPOINT + command, json=json, headers=HEADERS, auth=BASIC, verify=False, timeout=90)
     response.raise_for_status()
     return response.json()
 
 
 def post(command, json=None):
-    response = requests.post(ENDPOINT + command, json=json, headers=HEADERS, verify=False, timeout=90)
+    response = requests.post(ENDPOINT + command, json=json, headers=HEADERS, auth=BASIC, verify=False, timeout=90)
     response.raise_for_status()
     return response.json()
 
 
 def delete(command, json=None):
-    response = requests.delete(ENDPOINT + command, json=json, headers=HEADERS, verify=False, timeout=90)
+    response = requests.delete(ENDPOINT + command, json=json, headers=HEADERS, auth=BASIC, verify=False, timeout=90)
     response.raise_for_status()
     return response.json()
 
