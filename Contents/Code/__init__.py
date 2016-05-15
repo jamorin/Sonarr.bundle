@@ -1,10 +1,10 @@
 import requests
 import re
 from datetime import datetime
-from DumbTools import DumbKeyboard, DumbPrefs
 # import platform
 # if platform.system() == 'Darwin':
 #     from mock_framework import *
+from DumbTools import DumbKeyboard
 
 PREFIX = '/video/sonarr'
 NAME = 'Sonarr'
@@ -65,10 +65,7 @@ def main_menu():
                            title=L('unmet'),
                            summary=L('unmet_desc'),
                            thumb=R('exclamation-triangle.png')))
-    if Client.Product in DumbPrefs.clients:
-        DumbPrefs(PREFIX, oc, title=L('settings'), thumb=R('cogs.png'))
-    else:
-        oc.add(PrefsObject(title=L('settings'), thumb=R('cogs.png')))
+    oc.add(PrefsObject(title=L('settings'), thumb=R('cogs.png')))
     return oc
 
 
