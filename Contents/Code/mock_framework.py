@@ -80,6 +80,10 @@ class Datetime(object):
     def Delta(**kwargs):
         return Datetime
 
+    @staticmethod
+    def UTCNow(**kwargs):
+        return datetime.utcnow()
+
 
 class Resource(object):
     @staticmethod

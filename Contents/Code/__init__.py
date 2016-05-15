@@ -4,6 +4,7 @@ import re
 # if platform.system() == 'Darwin':
 #     from mock_framework import *
 from DumbTools import DumbKeyboard
+from updater import Updater
 
 PREFIX = '/video/sonarr'
 NAME = 'Sonarr'
@@ -65,6 +66,7 @@ def main_menu():
                            summary=L('unmet_desc'),
                            thumb=R('exclamation-triangle.png')))
     oc.add(PrefsObject(title=L('settings'), thumb=R('cogs.png')))
+    Updater(PREFIX + '/updater', oc)
     return oc
 
 
@@ -655,12 +657,12 @@ def monitor_badge(is_monitored):
 
 
 def success_message():
-    return MessageContainer(L('success'), L('success'))
+    return MessageContainer(L('Success'), L('Success'))
 
 
 def error_message(exception):
     Log.Exception('Error!')
-    return MessageContainer(L('error'), exception.message)
+    return MessageContainer(L('Error'), exception.message)
 
 
 def timestamp(time=Datetime.UTCNow()):
