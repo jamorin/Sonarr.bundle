@@ -1,73 +1,28 @@
 from datetime import datetime
 
 L = {
-    "series": "Series",
-    "seriesInfo": "View all series or add to your collection",
-    "addSeries": "Add series to collection",
-    "addSeriesInfo": "Using Default Profile but NOT monitored. Change this in Series section.",
-    "seriesSearch": "Search for Series",
-    "seasonSearch": "Search for Season",
-    "search": "Search Triggered",
-    "season": "Season %s",
-    "deleteSeries": "Delete Series",
-    "deleteSeason": "Delete Season",
-    "episodeSearch": "Episode Search",
-    "listEpisodes": "List episodes",
-    "episodeSearchInfo": "Automatic search for this episode",
-    "calendar": "Calendar",
-    "calendarInfo": "This week's upcoming episodes",
-    "queue": "Queue",
-    "queueInfo": "This week's upcoming episodes",
-    "history": "History",
-    "historyInfo": "Recently downloaded episodes",
-    "imported": "Imported",
-    "failed": "Failed",
-    "grabbed": "Grabbed",
-    "deleted": "Deleted",
-    "confirmDelete": "Confirm Deletion",
-    "fileWarn": "Warning: All files will be deleted from disk!",
-    "missing": "Missing",
-    "missingInfo": "List missing episodes",
-    "settings": "Settings",
-    "settingsInfo": "Plugin settings",
-    "success": "Success",
-    "error": "Error",
-    "status": "Status",
-    "noResults": "No results",
-    "network": "Network",
-    "monitored": "Monitored",
-    "monitorConfirm": "Confirm changing monitoring to %s",
-    "monitorSet": "Monitor set to %s",
-    "seasons": "Seasons",
-    "noInfo": "No information provided",
-    "unknown": "Unknown",
-    "empty": "Empty",
-    "quality": "Quality",
-    "listSeasons": "List seasons",
-    "toggleMonitor": "Toggle Monitoring",
-    "changeQuality": "Change Quality",
-    "current": " (Current)",
-    "cutOff": "Cutoff",
-    "saved": "Changes saved",
-    "downloaded": "Downloaded: %s - %s",
-    "today": "Today at ",
-    "tomorrow": "Tomorrow at ",
-    "yesterday": "Yesterday",
-    "daysago": " days ago",
-    "minutesago": " minutes ago",
-    "hourago": "1 hour ago",
-    "hoursago": " hours ago"
 }
 Prefs = {
-    "ip": "192.168.1.14",
-    "port": "8989",
-    "base": "/sonarr",
-    "https": False,
-    "apiKey": "12345",
-    "username": "user",
-    "password": "pass",
-    "auth": "basic"
 }
+
+class Client:
+    Product = ""
+
+def Redirect(url):
+    pass
+
+class Util:
+    @staticmethod
+    def RandomInt(a, b):
+        pass
+
+class HTTP:
+    @staticmethod
+    def ClearCookies():
+        pass
+    @staticmethod
+    def ClearCache():
+        pass
 
 def R(res):
     return ""
@@ -124,6 +79,10 @@ class Datetime(object):
     @staticmethod
     def Delta(**kwargs):
         return Datetime
+
+    @staticmethod
+    def UTCNow(**kwargs):
+        return datetime.utcnow()
 
 
 class Resource(object):

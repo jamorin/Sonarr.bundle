@@ -1,0 +1,29 @@
+version: '2'
+services:
+  plex:
+    image: linuxserver/plex
+    network_mode: host
+    environment:
+      # Relative times displayed in the Plugin are based off this timezone
+      - TZ=America/Phoenix
+      - VERSION=latest
+    volumes:
+      - ../:/config/Library/Application Support/Plex Media Server/Plug-ins/Sonarr.bundle:ro
+      - ./logs:/config/Library/Application Support/Plex Media Server/Logs/PMS Plugin Logs
+
+  sonarr:
+    image: linuxserver/sonarr
+    ports:
+      - "8989:8989"
+    volumes:
+      - /dev/rtc:/dev/rtc:ro
+
+  nginx:
+    image: nginx
+    depends_on:
+     - sonarr
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/htpasswd:/etc/nginx/passwords:ro
